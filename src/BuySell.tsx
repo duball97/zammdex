@@ -52,9 +52,9 @@ const computePoolId = (key: PoolKey): `0x${string}` =>
   keccak256(
     encodeAbiParameters(
       parseAbiParameters(
-        "address token0, uint256 id0, address token1, uint256 id1, uint96 swapFee",
+        "uint256 id0, uint256 id1, address token0, address token1, uint96 swapFee",
       ),
-      [key.token0, key.id0, key.token1, key.id1, key.swapFee],
+      [key.id0, key.id1, key.token0, key.token1, key.swapFee],
     ),
   );
 
