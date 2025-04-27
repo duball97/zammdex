@@ -1,7 +1,7 @@
 import { Address } from "viem";
 
 export const ZAAMAddress =
-  "0x0000000000009994A7A9A6Ec18E09EbA245E8410" as Address;
+  "0x00000000000008882D72EfA6cCE4B6a40b24C860" as Address;
 export const ZAAMAbi = [
   { inputs: [], stateMutability: "payable", type: "constructor" },
   { inputs: [], name: "Expired", type: "error" },

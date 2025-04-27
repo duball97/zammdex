@@ -22,7 +22,7 @@ export const CoinPaper = ({ onCoinClick }: { onCoinClick: () => void }) => (
 
       <div className="explanation">
         <p>
-          <strong>Coinchan</strong> is an extremely efficient coin launcher for
+          <strong>Coinchan</strong> is a ruthlessly optimized coin launcher for
           Ethereum via the <strong>ERC6909</strong> standard. All{" "}
           <em>21 000 000</em> tokens are initially locked in an AMM pool for
           fair distribution while creators earn swap fees. Sound good?
