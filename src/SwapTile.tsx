@@ -22,7 +22,7 @@ import { CoinsAbi, CoinsAddress } from "./constants/Coins";
 import { ZAAMAbi, ZAAMAddress } from "./constants/ZAAM";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -395,72 +395,74 @@ export const SwapTile = () => {
     );
 
   return (
-    <Card className="w-lg  p-6">
-      {/* SELL panel */}
-      <div className="group rounded-lg p-2 pb-6 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Sell</span>
-          <TokenSelector
-            token={sellToken}
-            tokens={tokens}
-            onSelect={setSellToken}
-          />
-        </div>
-        <input
-          type="number"
-          min="0"
-          step="any"
-          placeholder="0.0"
-          value={sellAmt}
-          onChange={(e) => syncFromSell(e.currentTarget.value)}
-          className="text-xl font-medium w-full focus:outline-none"
-        />
-      </div>
-
-      {/* flip button */}
-      <div className="flex justify-center">
-        <button
-          className="p-2 rounded-full shadow-xl bg-yellow-500"
-          onClick={flipTokens}
-        >
-          <ArrowDownUp className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* BUY panel */}
-      {buyToken && (
-        <div className="group rounded-lg p-2 pb-6 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Buy</span>
-            <TokenSelector
-              token={buyToken}
-              tokens={tokens}
-              onSelect={setBuyToken}
+    <Card className="w-lg p-6 border-2 border-none outline-none shadow-sm">
+      <CardContent className="p-1 flex flex-col space-y-1">
+        {/* SELL + FLIP + BUY panel container */}
+        <div className="relative flex flex-col">
+          {/* SELL panel */}
+          <div className="border-2 border-yellow-300 group hover:bg-yellow-50 rounded-t-2xl p-2 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Sell</span>
+              <TokenSelector
+                token={sellToken}
+                tokens={tokens}
+                onSelect={setSellToken}
+              />
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="0.0"
+              value={sellAmt}
+              onChange={(e) => syncFromSell(e.currentTarget.value)}
+              className="text-xl font-medium w-full focus:outline-none"
             />
           </div>
-          <input
-            type="number"
-            min="0"
-            step="any"
-            placeholder="0.0"
-            value={buyAmt}
-            onChange={(e) => syncFromBuy(e.currentTarget.value)}
-            className="text-xl font-medium w-full focus:outline-none"
-          />
+          {/* FLIP button */}
+          <button
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 active:scale-95 transition-all z-10"
+            onClick={flipTokens}
+          >
+            <ArrowDownUp className="h-4 w-4" />
+          </button>
+
+          {/* BUY panel */}
+          {buyToken && (
+            <div className="border-2 border-yellow-300 group rounded-b-2xl p-2 pt-3 focus-within:ring-2 hover:bg-yellow-50 focus-within:ring-primary flex flex-col gap-2 mt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Buy</span>
+                <TokenSelector
+                  token={buyToken}
+                  tokens={tokens}
+                  onSelect={setBuyToken}
+                />
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="0.0"
+                value={buyAmt}
+                onChange={(e) => syncFromBuy(e.currentTarget.value)}
+                className="text-xl font-medium w-full focus:outline-none"
+              />
+            </div>
+          )}
         </div>
-      )}
 
-      {/* ACTION BUTTON */}
-      <Button
-        onClick={executeSwap}
-        disabled={!isConnected || !canSwap || isPending || !sellAmt}
-        className="w-full text-lg"
-      >
-        {isPending ? "Swapping…" : "Swap"}
-      </Button>
+        {/* ACTION BUTTON */}
+        <Button
+          onClick={executeSwap}
+          disabled={!isConnected || !canSwap || isPending || !sellAmt}
+          className="w-full text-lg mt-4"
+        >
+          {isPending ? "Swapping…" : "Swap"}
+        </Button>
 
-      {error && <p className="text-sm text-destructive">{error.message}</p>}
-      {isSuccess && <p className="text-sm text-green-600">Tx confirmed!</p>}
+        {error && <p className="text-sm text-destructive">{error.message}</p>}
+        {isSuccess && <p className="text-sm text-green-600">Tx confirmed!</p>}
+      </CardContent>
     </Card>
   );
 };
