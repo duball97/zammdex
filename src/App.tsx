@@ -5,9 +5,12 @@ import { CoinPaper } from "./CoinPaper";
 import { CoinForm } from "./CoinForm";
 import Coins from "./Coins";
 import { ConnectMenu } from "./ConnectMenu";
+import SwapTile from "./SwapTile";
 
 function App() {
-  const [view, setView] = useState<"menu" | "form" | "memepaper">("menu");
+  const [view, setView] = useState<"menu" | "form" | "memepaper" | "swap">(
+    "menu",
+  );
   const [tapCount, setTapCount] = useState(0);
   const [lastTap, setLastTap] = useState(0);
 
@@ -33,6 +36,10 @@ function App() {
     setView("form");
   };
 
+  const handleSwapClick = () => {
+    setView("swap");
+  };
+
   return (
     <main>
       <header>
@@ -52,8 +59,19 @@ function App() {
         </div>
       )}
       {view === "memepaper" && <CoinPaper onCoinClick={handleCoinClick} />}
+      {view === "swap" && <SwapTile />}
       {view === "menu" && (
         <div className="container">
+          <div>
+            <div className="flex justify-center items-center w-full">
+              <button
+                className={`appearance-none mt-6 mx-auto flex items-center gap-2 px-5 py-2 bg-white hover:scale-105 font-mono text-red-500 transition-colors duration-200`}
+                onClick={handleSwapClick}
+              >
+                Swap
+              </button>
+            </div>
+          </div>
           <Coins />
           <div className="main-menu">
             {/* <ConnectMenu /> */}
