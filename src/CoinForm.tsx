@@ -116,7 +116,7 @@ export function CoinForm({
   };
 
   return (
-    <div>
+    <div className="border-2 border-[#b01e0e] rounded-lg p-5">
       <div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

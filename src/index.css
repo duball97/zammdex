@@ -1,7 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark {
+  &: is(.dark *);
+}
 
 /* ———————————————————————————————————————————————————————————————
    Variables
@@ -62,20 +64,6 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-body {
-  margin: 0;
-  padding: 1rem;
-  background: white;
-  color: var(--deep-red);
-  font-family: var(--font-body);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-height: 100vh;
-  justify-content: center;
-  overflow: hidden;
-}
-
 img.logo {
   width: 80vw; /* fluid on mobile */
   max-width: 240px; /* never exceed this on small */
@@ -92,13 +80,12 @@ img.logo.small {
   transform: scale(1.1);
 }
 
-/* wrapper */
-.container {
-  padding: 1rem;
-  box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.1);
-  animation: floatIn 0.6s ease-out;
-  overflow: hidden;
-  border: var(--deep-red) solid 2px;
+body {
+  min-height: 100vh;
+  width: 100vw;
+  background: white;
+  color: var(--deep-red);
+  font-family: var(--font-body);
 }
 
 /* menu & form */
@@ -294,11 +281,6 @@ a:hover {
 
 .coins-container {
   margin-bottom: 20px;
-}
-
-.coins-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 16px;
 }
 

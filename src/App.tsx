@@ -34,40 +34,42 @@ function App() {
   };
 
   return (
-    <main>
-      <header>
-        <ConnectMenu />
-      </header>
-      <img
-        src="/coinchan-logo.png"
-        alt="Coinchan"
-        className={`logo ${view !== "menu" ? "small" : ""}`}
-        onClick={handleLogoTap}
-        onTouchStart={handleLogoTap}
-      />
+    <main className="p-3 min-h-screen w-screen flex flex-col justify-center items-center">
+      <div>
+        <header>
+          <ConnectMenu />
+        </header>
+        <img
+          src="/coinchan-logo.png"
+          alt="Coinchan"
+          className={`logo ${view !== "menu" ? "small" : ""}`}
+          onClick={handleLogoTap}
+          onTouchStart={handleLogoTap}
+        />
 
-      {view === "form" && (
-        <div className="container">
-          <CoinForm onMemepaperClick={handleMemepaperClick} />
-        </div>
-      )}
-      {view === "memepaper" && <CoinPaper onCoinClick={handleCoinClick} />}
-      {view === "menu" && (
-        <div className="container">
-          <Coins />
-          <div className="main-menu">
-            {/* <ConnectMenu /> */}
-            <div className="flex justify-end items-end w-full">
-              <button
-                className={`appearance-none mt-6 mx-auto flex items-center gap-2 px-5 py-2 bg-white hover:scale-105 font-mono text-red-500 transition-colors duration-200`}
-                onClick={handleMemepaperClick}
-              >
-                🤓 Read the Coinpaper
-              </button>
+        {view === "form" && (
+          <div className="">
+            <CoinForm onMemepaperClick={handleMemepaperClick} />
+          </div>
+        )}
+        {view === "memepaper" && <CoinPaper onCoinClick={handleCoinClick} />}
+        {view === "menu" && (
+          <div className="">
+            <Coins />
+            <div className="main-menu">
+              {/* <ConnectMenu /> */}
+              <div className="flex justify-end items-end w-full">
+                <button
+                  className={`appearance-none mt-6 mx-auto flex items-center gap-2 px-5 py-2 bg-white hover:scale-105 font-mono text-red-500 transition-colors duration-200`}
+                  onClick={handleMemepaperClick}
+                >
+                  🤓 Read the Coinpaper
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </main>
   );
 }

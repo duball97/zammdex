@@ -12,7 +12,7 @@ export const CoinCard = ({
   const { name, symbol, tokenUri } = useCoinMeta(tokenId); // your hook
 
   return (
-    <Card className="flex border-2 border-red-900 rounded-md bg-yellow-50 w-fit flex-col items-right p-1 gap-3  shadow">
+    <Card className="flex border-2 border-red-900 rounded-md bg-yellow-50 w-[160px] flex-col items-right p-1 gap-3 shadow">
       <CardContent className="flex flex-col items-center justify-center space-y-2">
         <h3 className="text-center font-extrabold">
           {name} [{symbol}]
@@ -48,7 +48,7 @@ export const ExplorerGrid = ({
   onNext: () => void;
   onTrade: (id: bigint) => void;
 }) => (
-  <>
+  <div className="">
     <h2 className="mb-4 text-xl font-semibold">
       {total === 0
         ? "NO COINS DEPLOYED"
@@ -57,7 +57,7 @@ export const ExplorerGrid = ({
           : `${total} COINS DEPLOYED`}
     </h2>
 
-    <div className="coins-grid">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-1">
       {coins.map((id) => (
         <CoinCard key={id.toString()} tokenId={id} onTrade={onTrade} />
       ))}
@@ -79,5 +79,5 @@ export const ExplorerGrid = ({
         Next
       </button>
     </div>
-  </>
+  </div>
 );
