@@ -11,7 +11,6 @@ import {
 export function ConnectMenu() {
   const { isConnected, address } = useAccount();
   const { connect, connectors } = useConnect();
-  console.log("connectors", connectors);
 
   if (isConnected) {
     return (

@@ -106,11 +106,6 @@ label {
   color: var(--deep-red);
   margin-bottom: 0.25rem;
 }
-p {
-  font-style: italic;
-  color: var(--dark-gold);
-  margin: 0.5rem 0;
-}
 
 /* misc */
 a {
