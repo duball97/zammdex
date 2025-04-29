@@ -8,7 +8,49 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import ImageInput from "./components/ui/image-input";
+import { useRef } from "react";
+
+// Fixed ImageInput component included directly in the file
+const ImageInput = ({ onChange }) => {
+  const fileInputRef = useRef(null);
+  const [selectedFileName, setSelectedFileName] = useState(null);
+  
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedFileName(file.name);
+      // Pass the single File object as expected by the parent component
+      onChange(file);
+      
+      // Reset the input value to ensure onChange fires even if the same file is selected again
+      e.target.value = '';
+    }
+  };
+  
+  return (
+    <div className="flex flex-col gap-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
+      <div className="flex items-center gap-2">
+        <Button 
+          type="button" // Prevent form submission
+          onClick={() => fileInputRef.current.click()}
+          variant="outline"
+        >
+          {selectedFileName ? 'Change Image' : 'Browse Files'}
+        </Button>
+        {selectedFileName && (
+          <span className="text-sm text-gray-500">{selectedFileName}</span>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export function CoinForm({
   onMemepaperClick,
