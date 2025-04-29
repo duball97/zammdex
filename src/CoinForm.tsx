@@ -1,5 +1,5 @@
 import confetti from "canvas-confetti";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { useAccount, useWriteContract } from "wagmi";
 import { parseEther } from "viem";
@@ -20,16 +20,23 @@ export function CoinForm({
     symbol: "",
     description: "",
     logo: "",
+    creatorSupply: "0",
   });
 
   const [imageBuffer, setImageBuffer] = useState<ArrayBuffer | null>(null);
   const { address } = useAccount();
 
-  const poolSupply = 21000000;
-  const creatorSupply = 0;
+  const TOTAL_SUPPLY = 21000000;
+  const [poolSupply, setPoolSupply] = useState(TOTAL_SUPPLY);
   const swapFee = 100;
   const vestingDuration = 15778476;
   const vesting = true;
+
+  useEffect(() => {
+    const creatorAmount = Number(formState.creatorSupply) || 0;
+    const safeCreatorAmount = Math.min(creatorAmount, TOTAL_SUPPLY);
+    setPoolSupply(TOTAL_SUPPLY - safeCreatorAmount);
+  }, [formState.creatorSupply]);
 
   const { writeContract, isPending, isSuccess, data } = useWriteContract();
 
@@ -41,10 +48,9 @@ export function CoinForm({
       return;
     }
 
-    console.log("Deploying coin with:", {
-      ...formState,
-      supply: poolSupply,
-    });
+    const creatorSupplyValue = Number(formState.creatorSupply) || 0;
+    const safeCreatorSupply = Math.min(creatorSupplyValue, TOTAL_SUPPLY);
+    const finalPoolSupply = TOTAL_SUPPLY - safeCreatorSupply;
 
     try {
       const fileName = `${formState.name}_logo.png`;
@@ -74,8 +80,8 @@ export function CoinForm({
           formState.name,
           formState.symbol,
           tokenUriHash,
-          parseEther(poolSupply.toString()),
-          parseEther(creatorSupply.toString()),
+          parseEther(finalPoolSupply.toString()),
+          parseEther(safeCreatorSupply.toString()),
           BigInt(swapFee),
           address,
           BigInt(Math.floor(Date.now() / 1000) + vestingDuration),
@@ -152,6 +158,21 @@ export function CoinForm({
               onChange={handleChange}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="creatorSupply">Creator Supply</Label>
+            <Input
+              id="creatorSupply"
+              type="text"
+              name="creatorSupply"
+              placeholder="0"
+              value={formState.creatorSupply}
+              onChange={handleChange}
+            />
+            <p className="text-sm text-gray-500">
+              Pool Supply: {poolSupply.toLocaleString()} (Total: {TOTAL_SUPPLY.toLocaleString()})
+            </p>
           </div>
 
           <div className="space-y-2">
