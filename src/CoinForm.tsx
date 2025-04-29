@@ -14,10 +14,11 @@ interface ImageInputProps {
   onChange: (file: File | File[] | undefined) => void;
 }
 
-// Fixed ImageInput component with drag and drop restored
+// Fixed ImageInput component with drag and drop and preview
 const ImageInput = ({ onChange }: ImageInputProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -31,7 +32,20 @@ const ImageInput = ({ onChange }: ImageInputProps) => {
 
   const handleFile = (file: File) => {
     setSelectedFileName(file.name);
+    
+    // Create preview URL
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    
+    // Call parent onChange handler
     onChange(file);
+    
+    // Clean up the preview URL when component unmounts
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
   };
   
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -56,6 +70,15 @@ const ImageInput = ({ onChange }: ImageInputProps) => {
       handleFile(files[0]);
     }
   };
+
+  // Clean up the URL when component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
   
   return (
     <div className="flex flex-col gap-2">
@@ -74,18 +97,39 @@ const ImageInput = ({ onChange }: ImageInputProps) => {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="text-center">
-          <p className="mb-2">{selectedFileName ? `Selected: ${selectedFileName}` : 'Drag & drop image here'}</p>
-          <p>or</p>
-          <Button 
-            type="button" // Prevent form submission
-            onClick={() => fileInputRef.current?.click()} // Added ? to handle null case
-            variant="outline"
-            className="mt-2"
-          >
-            {selectedFileName ? 'Change Image' : 'Browse Files'}
-          </Button>
-        </div>
+        {previewUrl ? (
+          <div className="flex flex-col items-center gap-4">
+            <img 
+              src={previewUrl} 
+              alt="Preview" 
+              className="max-h-32 max-w-full object-contain rounded-md" 
+            />
+            <div className="flex flex-col items-center">
+              <p className="text-sm text-gray-500 mb-2">{selectedFileName}</p>
+              <Button 
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                variant="outline"
+                size="sm"
+              >
+                Change Image
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center">
+            <p className="mb-2">Drag & drop image here</p>
+            <p>or</p>
+            <Button 
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              variant="outline"
+              className="mt-2"
+            >
+              Browse Files
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
