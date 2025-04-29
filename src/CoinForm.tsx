@@ -1,5 +1,5 @@
 import confetti from "canvas-confetti";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { useAccount, useWriteContract } from "wagmi";
 import { parseEther } from "viem";
@@ -8,15 +8,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useRef } from "react";
+
+// Define proper types for the ImageInput component
+interface ImageInputProps {
+  onChange: (file: File | File[] | undefined) => void;
+}
 
 // Fixed ImageInput component included directly in the file
-const ImageInput = ({ onChange }) => {
-  const fileInputRef = useRef(null);
-  const [selectedFileName, setSelectedFileName] = useState(null);
+const ImageInput = ({ onChange }: ImageInputProps) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       setSelectedFileName(file.name);
       // Pass the single File object as expected by the parent component
@@ -39,7 +43,7 @@ const ImageInput = ({ onChange }) => {
       <div className="flex items-center gap-2">
         <Button 
           type="button" // Prevent form submission
-          onClick={() => fileInputRef.current.click()}
+          onClick={() => fileInputRef.current?.click()} // Added ? to handle null case
           variant="outline"
         >
           {selectedFileName ? 'Change Image' : 'Browse Files'}
