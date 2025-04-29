@@ -152,14 +152,6 @@ export const BuySell = ({
     }
   }, [amount, reserves, tab]);
 
-  console.log({
-    reserves,
-    poolKey,
-    poolId,
-    isOperator,
-    estimated,
-  });
-
   // BUY using ETH → token
   const onBuy = async () => {
     if (!reserves || !address) return;
