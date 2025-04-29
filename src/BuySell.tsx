@@ -104,7 +104,13 @@ export const BuySell = ({
       select: ([r0, r1]) => ({ reserve0: r0, reserve1: r1 }),
     },
   });
-
+  const { data: balance } = useReadContract({
+    address: CoinsAddress,
+    abi: CoinsAbi,
+    functionName: "balanceOf",
+    args: address ? [address, tokenId] : undefined,
+    chainId: 1,
+  });
   // fetch allowance / operator state
   const { data: isOperator } = useReadContract({
     address: CoinsAddress,
@@ -257,15 +263,34 @@ export const BuySell = ({
       <TabsContent value="sell">
         <div className="flex flex-col gap-2">
           <span className="text-sm text-gray-600">Using {symbol}</span>
-          <Input
-            type="number"
-            placeholder={`Amount ${symbol}`}
-            value={amount}
-            min="0"
-            step="any"
-            onChange={(e) => setAmount(e.currentTarget.value)}
-          />
-          <span className="text-sm">You will receive ~ {estimated} ETH</span>
+          <div className="relative">
+            <Input
+              type="number"
+              placeholder={`Amount ${symbol}`}
+              value={amount}
+              min="0"
+              step="any"
+              onChange={(e) => setAmount(e.currentTarget.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-sm">You will receive ~ {estimated} ETH</span>
+            {balance !== undefined ? (
+              <button
+                className="self-end text-sm text-gray-600"
+                onClick={() => setAmount(formatUnits(balance, 18))}
+              >
+                MAX ({formatUnits(balance, 18)})
+              </button>
+            ) : (
+              <button
+                className="self-end text-sm text-gray-600"
+                disabled={!balance}
+              >
+                MAX
+              </button>
+            )}
+          </div>
           <Button
             onClick={onSell}
             disabled={!isConnected || isPending || !amount}

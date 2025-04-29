@@ -15,23 +15,14 @@ export const TradeView = ({
       <button onClick={onBack} className="text-sm self-start underline">
         ⬅︎ Back to Explorer
       </button>
-      {/*
-      <div className="flex flex-col items-center gap-2">
-        {tokenUri.startsWith("http") ? (
-          <img
-            src={tokenUri.startsWith("http") ? tokenUri : "/placeholder.png"}
-            alt={`${symbol} logo`}
-            className="w-12 h-12 rounded-full object-cover"
-          />
-        ) : (
-          <div className="w-12 h-12 flex bg-red-500 text-white justify-center items-center rounded-full">
-            {symbol?.slice(0, 3)}
-          </div>
-        )}
+
+      <div className="flex flex-col items-start gap-2">
         <h2 className="text-xl font-semibold">
           {name} [{symbol}]
         </h2>
-      </div> */}
+        {/* Metadata like tokenId */}
+        <p>ID: {tokenId.toString()}</p>
+      </div>
 
       {/* buy / sell form from previous answer */}
       <BuySell tokenId={tokenId} name={name} symbol={symbol} />
