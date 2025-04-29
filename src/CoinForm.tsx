@@ -1,5 +1,5 @@
 import confetti from "canvas-confetti";
-import { useState } from "react";
+import { useState, useEffect, useRef, ChangeEvent, DragEvent } from "react";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { useAccount, useWriteContract } from "wagmi";
 import { parseEther } from "viem";
@@ -8,7 +8,132 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import ImageInput from "./components/ui/image-input";
+
+// Define proper types for the ImageInput component
+interface ImageInputProps {
+  onChange: (file: File | File[] | undefined) => void;
+}
+
+// Fixed ImageInput component with drag and drop and preview
+const ImageInput = ({ onChange }: ImageInputProps) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFile(file);
+      // Reset the input value to ensure onChange fires even if the same file is selected again
+      e.target.value = '';
+    }
+  };
+
+  const handleFile = (file: File) => {
+    setSelectedFileName(file.name);
+    
+    // Create preview URL
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    
+    // Call parent onChange handler
+    onChange(file);
+    
+    // Clean up the preview URL when component unmounts
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  };
+  
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+  
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+  
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    const files = e.dataTransfer.files;
+    if (files?.length) {
+      handleFile(files[0]);
+    }
+  };
+
+  // Clean up the URL when component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+  
+  return (
+    <div className="flex flex-col gap-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
+      <div 
+        className={`flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-md ${
+          isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+        } transition-colors duration-200`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {previewUrl ? (
+          <div className="flex flex-col items-center gap-4">
+            <img 
+              src={previewUrl} 
+              alt="Preview" 
+              className="max-h-32 max-w-full object-contain rounded-md" 
+            />
+            <div className="flex flex-col items-center">
+              <p className="text-sm text-gray-500 mb-2">{selectedFileName}</p>
+              <Button 
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                variant="outline"
+                size="sm"
+              >
+                Change Image
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center">
+            <p className="mb-2">Drag & drop image here</p>
+            <p>or</p>
+            <Button 
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              variant="outline"
+              className="mt-2"
+            >
+              Browse Files
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export function CoinForm({
   onMemepaperClick,
@@ -20,16 +145,23 @@ export function CoinForm({
     symbol: "",
     description: "",
     logo: "",
+    creatorSupply: "0",
   });
 
   const [imageBuffer, setImageBuffer] = useState<ArrayBuffer | null>(null);
   const { address } = useAccount();
 
-  const poolSupply = 21000000;
-  const creatorSupply = 0;
+  const TOTAL_SUPPLY = 21000000;
+  const [poolSupply, setPoolSupply] = useState(TOTAL_SUPPLY);
   const swapFee = 100;
   const vestingDuration = 15778476;
   const vesting = true;
+
+  useEffect(() => {
+    const creatorAmount = Number(formState.creatorSupply) || 0;
+    const safeCreatorAmount = Math.min(creatorAmount, TOTAL_SUPPLY);
+    setPoolSupply(TOTAL_SUPPLY - safeCreatorAmount);
+  }, [formState.creatorSupply]);
 
   const { writeContract, isPending, isSuccess, data } = useWriteContract();
 
@@ -41,10 +173,9 @@ export function CoinForm({
       return;
     }
 
-    console.log("Deploying coin with:", {
-      ...formState,
-      supply: poolSupply,
-    });
+    const creatorSupplyValue = Number(formState.creatorSupply) || 0;
+    const safeCreatorSupply = Math.min(creatorSupplyValue, TOTAL_SUPPLY);
+    const finalPoolSupply = TOTAL_SUPPLY - safeCreatorSupply;
 
     try {
       const fileName = `${formState.name}_logo.png`;
@@ -74,8 +205,8 @@ export function CoinForm({
           formState.name,
           formState.symbol,
           tokenUriHash,
-          parseEther(poolSupply.toString()),
-          parseEther(creatorSupply.toString()),
+          parseEther(finalPoolSupply.toString()),
+          parseEther(safeCreatorSupply.toString()),
           BigInt(swapFee),
           address,
           BigInt(Math.floor(Date.now() / 1000) + vestingDuration),
@@ -116,7 +247,7 @@ export function CoinForm({
   };
 
   return (
-    <div>
+    <div className="border-2 border-[#b01e0e] rounded-lg p-5">
       <div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -152,6 +283,21 @@ export function CoinForm({
               onChange={handleChange}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="creatorSupply">Creator Supply</Label>
+            <Input
+              id="creatorSupply"
+              type="text"
+              name="creatorSupply"
+              placeholder="0"
+              value={formState.creatorSupply}
+              onChange={handleChange}
+            />
+            <p className="text-sm text-gray-500">
+              Pool Supply: {poolSupply.toLocaleString()} (Total: {TOTAL_SUPPLY.toLocaleString()})
+            </p>
           </div>
 
           <div className="space-y-2">
