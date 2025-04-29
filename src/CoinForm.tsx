@@ -1,5 +1,5 @@
 import confetti from "canvas-confetti";
-import { useState, useEffect, useRef, ChangeEvent } from "react";
+import { useState, useEffect, useRef, ChangeEvent, DragEvent } from "react";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { useAccount, useWriteContract } from "wagmi";
 import { parseEther } from "viem";
@@ -14,20 +14,46 @@ interface ImageInputProps {
   onChange: (file: File | File[] | undefined) => void;
 }
 
-// Fixed ImageInput component included directly in the file
+// Fixed ImageInput component with drag and drop restored
 const ImageInput = ({ onChange }: ImageInputProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
   
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setSelectedFileName(file.name);
-      // Pass the single File object as expected by the parent component
-      onChange(file);
-      
+      handleFile(file);
       // Reset the input value to ensure onChange fires even if the same file is selected again
       e.target.value = '';
+    }
+  };
+
+  const handleFile = (file: File) => {
+    setSelectedFileName(file.name);
+    onChange(file);
+  };
+  
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+  
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+  
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    const files = e.dataTransfer.files;
+    if (files?.length) {
+      handleFile(files[0]);
     }
   };
   
@@ -40,17 +66,26 @@ const ImageInput = ({ onChange }: ImageInputProps) => {
         accept="image/*"
         className="hidden"
       />
-      <div className="flex items-center gap-2">
-        <Button 
-          type="button" // Prevent form submission
-          onClick={() => fileInputRef.current?.click()} // Added ? to handle null case
-          variant="outline"
-        >
-          {selectedFileName ? 'Change Image' : 'Browse Files'}
-        </Button>
-        {selectedFileName && (
-          <span className="text-sm text-gray-500">{selectedFileName}</span>
-        )}
+      <div 
+        className={`flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-md ${
+          isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+        } transition-colors duration-200`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div className="text-center">
+          <p className="mb-2">{selectedFileName ? `Selected: ${selectedFileName}` : 'Drag & drop image here'}</p>
+          <p>or</p>
+          <Button 
+            type="button" // Prevent form submission
+            onClick={() => fileInputRef.current?.click()} // Added ? to handle null case
+            variant="outline"
+            className="mt-2"
+          >
+            {selectedFileName ? 'Change Image' : 'Browse Files'}
+          </Button>
+        </div>
       </div>
     </div>
   );
