@@ -344,11 +344,16 @@ export const SwapTile = () => {
           abi: ZAAMAbi,
           functionName: "pools",
           args: [poolId],
-        }) as [bigint, bigint];
+        });
+        
+        // Handle the returned data structure correctly
+        // The contract might return more fields than just the reserves
+        // Cast to unknown first, then extract the reserves from the array
+        const poolData = result as unknown as readonly bigint[];
         
         setReserves({
-          reserve0: result[0],
-          reserve1: result[1]
+          reserve0: poolData[0],
+          reserve1: poolData[1]
         });
       } catch (err) {
         console.error("Failed to fetch reserves:", err);
