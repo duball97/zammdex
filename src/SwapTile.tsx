@@ -472,7 +472,7 @@ export const SwapTile = () => {
     (sellToken.id !== null && buyToken?.id !== null && sellToken.id !== buyToken.id)
   );
   const isSellETH = sellToken.id === null;
-  const isCoinToCoin = sellToken.id !== null && buyToken?.id !== null && sellToken.id !== buyToken.id;
+  const isCoinToCoin = sellToken.id !== null && buyToken?.id !== null && buyToken?.id !== undefined && sellToken.id !== buyToken.id;
   const coinId = (isSellETH ? buyToken?.id : sellToken.id) ?? 0n;
 
   /* user inputs */

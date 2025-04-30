@@ -79,7 +79,7 @@ export function createCoinSwapMulticall(
   expectedEthOut: bigint,
   amountOutMinFinal: bigint,
   receiver: Address
-): string[] {
+): `0x${string}`[] {
   // Create pool keys for both swaps
   const sourcePoolKey = computePoolKey(sourceCoinId);
   const targetPoolKey = computePoolKey(targetCoinId);
@@ -168,8 +168,8 @@ export function createCoinSwapMulticall(
  * @returns Estimated output amount of target coin and the intermediate ETH amount
  */
 export function estimateCoinToCoinOutput(
-  sourceCoinId: bigint,
-  targetCoinId: bigint,
+  _sourceCoinId: bigint, // Prefixed with underscore to indicate it's unused
+  _targetCoinId: bigint, // Prefixed with underscore to indicate it's unused
   amountIn: bigint,
   sourceReserves: { reserve0: bigint, reserve1: bigint },
   targetReserves: { reserve0: bigint, reserve1: bigint }
