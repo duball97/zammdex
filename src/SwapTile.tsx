@@ -103,130 +103,184 @@ const getAmountIn = (
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  HOOK: fetch all Coinchan tokens once
+  HOOK: fetch all Coinchan tokens once - ROBUST VERSION
 ──────────────────────────────────────────────────────────────────────────── */
 const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: string | null } => {
   const publicClient = usePublicClient({ chainId: mainnet.id });
   const chainId = useChainId();
-  const { data: totalCoins } = useReadContract({
-    address: CoinchanAddress,
-    abi: CoinchanAbi,
-    functionName: "getCoinsCount",
-    chainId: mainnet.id,
-  });
-
   const [tokens, setTokens] = useState<TokenMeta[]>([ETH_TOKEN]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Reset loading state when starting fresh
+  // Fetch coin count directly - don't use useReadContract to avoid cached results
+  const fetchTokens = async () => {
+    console.log("Starting token fetch process");
     setLoading(true);
     setError(null);
     
-    // Check network first
-    if (publicClient && chainId !== mainnet.id) {
-      setError(`Please connect to Ethereum mainnet`);
+    if (!publicClient) {
+      console.error("No public client available");
+      setError("No wallet connection available");
       setLoading(false);
       return;
     }
-
-    (async () => {
-      try {
-        const total = Number(totalCoins ?? 0n);
+    
+    if (chainId !== mainnet.id) {
+      console.log(`Connected to chain ${chainId}, need mainnet (1)`);
+      setError("Please connect to Ethereum mainnet");
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      // Step 1: Get the total number of coins
+      console.log("Fetching coin count...");
+      const totalCoins = await publicClient.readContract({
+        address: CoinchanAddress,
+        abi: CoinchanAbi,
+        functionName: "getCoinsCount",
+      });
+      
+      const total = Number(totalCoins);
+      console.log(`Total coins in contract: ${total}`);
+      
+      if (total === 0) {
+        console.log("No coins found in contract");
+        setTokens([ETH_TOKEN]);
+        setLoading(false);
+        return;
+      }
+      
+      // Step 2: Fetch all coins in batches to prevent timeout
+      const BATCH_SIZE = 10;
+      let allIds: bigint[] = [];
+      
+      for (let start = 0; start < total; start += BATCH_SIZE) {
+        const end = Math.min(start + BATCH_SIZE - 1, total - 1);
+        console.log(`Fetching coins from ${start} to ${end}...`);
         
-        // If no tokens, just return ETH
-        if (total === 0) {
-          setTokens([ETH_TOKEN]);
-          setLoading(false);
-          return;
-        }
-
-        // Try to get coins
-        let ids: bigint[] = [];
         try {
-          ids = (await publicClient?.readContract({
+          const batchIds = await publicClient.readContract({
             address: CoinchanAddress,
             abi: CoinchanAbi,
             functionName: "getCoins",
-            args: [0n, BigInt(total)],
-          })) as bigint[];
+            args: [BigInt(start), BigInt(end)],
+          }) as bigint[];
+          
+          console.log(`Retrieved ${batchIds.length} coins from batch ${start}-${end}:`, batchIds);
+          allIds = [...allIds, ...batchIds];
         } catch (err) {
-          console.error("Failed to get all coins, using fallback", err);
-          // Fallback to getting individual coins
-          const individual: bigint[] = [];
-          for (let i = 0; i < Math.min(total, 100); i++) {
+          console.error(`Failed to fetch coins batch ${start}-${end}:`, err);
+          
+          // Fallback to individual coin fetching for this batch
+          for (let i = start; i <= end; i++) {
             try {
-              const id = (await publicClient?.readContract({
+              const id = await publicClient.readContract({
                 address: CoinchanAddress,
                 abi: CoinchanAbi,
                 functionName: "coins",
                 args: [BigInt(i)],
-              })) as bigint;
-              individual.push(id);
-            } catch {
-              // Skip individual errors
+              }) as bigint;
+              
+              console.log(`Retrieved individual coin at index ${i}:`, id);
+              allIds.push(id);
+            } catch (coinErr) {
+              console.error(`Failed to get coin at index ${i}:`, coinErr);
             }
           }
-          ids = individual;
         }
-
-        if (!ids.length) {
-          setTokens([ETH_TOKEN]);
-          setLoading(false);
-          return;
-        }
-
-        // Get token metadata
-        const metas = await Promise.all(
-          ids.map(async (id) => {
-            try {
-              const [symbol, name] = (await Promise.all([
-                publicClient?.readContract({
-                  address: CoinsAddress,
-                  abi: CoinsAbi,
-                  functionName: "symbol",
-                  args: [id],
-                }).catch(() => `C#${id.toString()}`),
-                publicClient?.readContract({
-                  address: CoinsAddress,
-                  abi: CoinsAbi,
-                  functionName: "name",
-                  args: [id],
-                }).catch(() => `Coin #${id.toString()}`),
-              ])) as [string, string];
-              return { id, name, symbol } satisfies TokenMeta;
-            } catch {
-              return {
-                id,
-                name: `Coin #${id}`,
-                symbol: `C#${id}`,
-              } satisfies TokenMeta;
-            }
-          }),
-        );
-
-        // Set all tokens ensuring no duplicates
-        const seen = new Set<string>(["null"]); // ETH is already added
-        const uniqueTokens = [ETH_TOKEN];
-        
-        for (const token of metas) {
-          const idStr = token.id?.toString() || "null";
-          if (!seen.has(idStr)) {
-            seen.add(idStr);
-            uniqueTokens.push(token);
-          }
-        }
-
-        setTokens(uniqueTokens);
-      } catch (err) {
-        console.error("Error in token loading:", err);
-        // Don't set error here to allow UI to still show
-      } finally {
-        setLoading(false);
       }
-    })();
-  }, [totalCoins, publicClient, chainId]);
+      
+      console.log(`Successfully retrieved ${allIds.length} coin IDs out of ${total} total`);
+      
+      if (allIds.length === 0) {
+        console.log("No valid coin IDs retrieved");
+        setTokens([ETH_TOKEN]);
+        setLoading(false);
+        return;
+      }
+      
+      // Step 3: Get metadata for each coin ID in parallel batches
+      const METADATA_BATCH_SIZE = 5;
+      const allTokens: TokenMeta[] = [ETH_TOKEN];
+      const uniqueIds = new Set<string>();
+      
+      for (let i = 0; i < allIds.length; i += METADATA_BATCH_SIZE) {
+        const batch = allIds.slice(i, i + METADATA_BATCH_SIZE);
+        const batchPromises = batch.map(async (id) => {
+          const idStr = id.toString();
+          
+          // Skip duplicates
+          if (uniqueIds.has(idStr)) {
+            console.log(`Skipping duplicate coin ID: ${idStr}`);
+            return null;
+          }
+          
+          uniqueIds.add(idStr);
+          
+          try {
+            console.log(`Fetching metadata for coin ID ${idStr}...`);
+            
+            // Try to get symbol and name in parallel
+            const [symbolResult, nameResult] = await Promise.allSettled([
+              publicClient.readContract({
+                address: CoinsAddress,
+                abi: CoinsAbi,
+                functionName: "symbol",
+                args: [id],
+              }),
+              publicClient.readContract({
+                address: CoinsAddress,
+                abi: CoinsAbi,
+                functionName: "name",
+                args: [id],
+              }),
+            ]);
+            
+            // Extract results with fallbacks
+            const symbol = symbolResult.status === "fulfilled" 
+              ? symbolResult.value as string 
+              : `C#${idStr}`;
+              
+            const name = nameResult.status === "fulfilled" 
+              ? nameResult.value as string 
+              : `Coin #${idStr}`;
+            
+            console.log(`Metadata for ${idStr}: ${symbol} (${name})`);
+            return { id, symbol, name } as TokenMeta;
+          } catch (err) {
+            console.error(`Failed to get metadata for coin ${idStr}:`, err);
+            // Still return a token with fallback metadata
+            return { 
+              id, 
+              symbol: `C#${idStr}`, 
+              name: `Coin #${idStr}` 
+            } as TokenMeta;
+          }
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        const validTokens = batchResults.filter(Boolean) as TokenMeta[];
+        allTokens.push(...validTokens);
+        
+        // Update tokens incrementally as we go
+        setTokens([...allTokens]);
+      }
+      
+      console.log(`Final token list: ${allTokens.length} tokens`);
+      setTokens(allTokens);
+    } catch (err) {
+      console.error("Fatal error in token loading:", err);
+      setError("Failed to load tokens. Check console for details.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Run token fetching on component mount and when chain changes
+  useEffect(() => {
+    fetchTokens();
+  }, [chainId, publicClient]);
 
   return { tokens, loading, error };
 };
@@ -252,16 +306,20 @@ const TokenSelector = ({
     </PopoverTrigger>
     <PopoverContent side="bottom" align="start" className="p-0 w-48">
       <ScrollArea className="h-64">
-        {tokens.map((t) => (
-          <button
-            key={t.id?.toString() ?? "eth"}
-            className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted"
-            onClick={() => onSelect(t)}
-          >
-            <span>{t.symbol}</span>
-            {t.symbol === token.symbol && <Check className="h-4 w-4" />}
-          </button>
-        ))}
+        {tokens.length <= 1 ? (
+          <div className="p-2 text-sm text-center text-gray-500">No tokens available</div>
+        ) : (
+          tokens.map((t) => (
+            <button
+              key={t.id?.toString() ?? "eth"}
+              className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted"
+              onClick={() => onSelect(t)}
+            >
+              <span>{t.symbol}</span>
+              {t.symbol === token.symbol && <Check className="h-4 w-4" />}
+            </button>
+          ))
+        )}
       </ScrollArea>
     </PopoverContent>
   </Popover>
@@ -275,10 +333,16 @@ export const SwapTile = () => {
   const { tokens, loading, error: loadError } = useAllTokens();
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
+  
+  // Add a debug state to show token count
+  const tokenCount = tokens.length;
 
   // Default buy token once list loads
   useEffect(() => {
-    if (!buyToken && tokens.length > 1) setBuyToken(tokens[1]);
+    if (!buyToken && tokens.length > 1) {
+      console.log("Setting initial buyToken to:", tokens[1]);
+      setBuyToken(tokens[1]);
+    }
   }, [tokens, buyToken]);
 
   const flipTokens = () => {
@@ -510,6 +574,11 @@ export const SwapTile = () => {
   return (
     <Card className="w-lg p-6 border-2 border-yellow-100 shadow-md rounded-xl">
       <CardContent className="p-1 flex flex-col space-y-1">
+        {/* Debug info showing token count */}
+        <div className="text-xs text-gray-500 mb-2">
+          Available tokens: {tokenCount}
+        </div>
+        
         {/* Load error notification (minimal) */}
         {loadError && (
           <div className="p-2 mb-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
