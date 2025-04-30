@@ -35,8 +35,8 @@ import { mainnet } from "viem/chains";
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
 ──────────────────────────────────────────────────────────────────────────── */
-const SWAP_FEE = 100n; // 1% pool fee
-const SLIPPAGE_BPS = 100n; // 1% slippage tolerance
+const SWAP_FEE = 100n; // 1 % pool fee
+const SLIPPAGE_BPS = 100n; // 1 % slippage tolerance
 const DEADLINE_SEC = 20 * 60; // 20 minutes
 
 const withSlippage = (amount: bigint) =>
@@ -98,13 +98,14 @@ const getAmountIn = (
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  HOOK: fetch all Coinchan tokens once with error handling
+  IMPROVED HOOK: fetch all Coinchan tokens once with better error handling
 ──────────────────────────────────────────────────────────────────────────── */
 const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: Error | null } => {
   const publicClient = usePublicClient({ chainId: 1 });
   const [tokens, setTokens] = useState<TokenMeta[]>([ETH_TOKEN]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>("");
 
   // Get the total count of tokens
   const { data: totalCoins, isLoading: isLoadingCount, isError: isErrorCount } = useReadContract({
@@ -114,6 +115,13 @@ const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: Error |
     chainId: 1,
   });
 
+  // Debug display for developer use
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("debug=true")) {
+      setDebugInfo(`Count: ${totalCoins?.toString() || "loading"}, Loading: ${loading}, Tokens: ${tokens.length}`);
+    }
+  }, [totalCoins, loading, tokens.length]);
+
   useEffect(() => {
     // Reset error state on refetch
     setError(null);
@@ -121,6 +129,7 @@ const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: Error |
     // Only proceed if we have the token count and the public client
     if (isLoadingCount || isErrorCount || totalCoins === undefined || !publicClient) {
       if (isErrorCount) {
+        console.error("Failed to get token count");
         setError(new Error("Failed to get token count"));
         setLoading(false);
       }
@@ -129,72 +138,129 @@ const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: Error |
 
     const fetchTokens = async () => {
       try {
-        console.log(`Fetching ${totalCoins} tokens from Coinchan`);
+        console.log(`Fetching tokens from Coinchan. Total count: ${totalCoins}`);
         const total = Number(totalCoins || 0n);
         
         // If no tokens, just return ETH
         if (total === 0) {
+          console.log("No tokens found in coinchan contract");
           setTokens([ETH_TOKEN]);
           return;
         }
 
         // Fetch all coin IDs from coinchan
-        // The contract handles range checking internally, so if we pass
-        // [0, total], it will cap the range at [0, total-1] if needed
-        const ids: bigint[] = (await publicClient.readContract({
-          address: CoinchanAddress,
-          abi: CoinchanAbi,
-          functionName: "getCoins",
-          args: [0n, BigInt(total - 1)], // Use total-1 as the finish index
-        })) as bigint[];
-
-        console.log(`Fetched ${ids.length} token IDs`);
+        console.log(`Fetching coins with range: 0 to ${total - 1}`);
         
-        // Fetch metadata for each token in parallel
-        const metaPromises = ids.map(async (id) => {
-          try {
-            // Query the COINS contract for token metadata
-            const results = await Promise.all([
-              publicClient.readContract({
-                address: CoinsAddress,
-                abi: CoinsAbi,
-                functionName: "symbol",
-                args: [id],
-              }),
-              publicClient.readContract({
-                address: CoinsAddress,
-                abi: CoinsAbi,
-                functionName: "name",
-                args: [id],
-              }),
-            ]);
-            
-            const symbol = results[0] as string;
-            const name = results[1] as string;
-            
-            return { id, name, symbol } satisfies TokenMeta;
-          } catch (err) {
-            console.warn(`Error fetching metadata for token ${id}:`, err);
-            // Fallback with a generic name if metadata fetch fails
-            return {
-              id,
-              name: `Coin #${id.toString()}`,
-              symbol: `C#${id.toString()}`,
-            } satisfies TokenMeta;
+        let ids: bigint[] = [];
+        try {
+          // The contract handles range checking internally
+          ids = (await publicClient.readContract({
+            address: CoinchanAddress,
+            abi: CoinchanAbi,
+            functionName: "getCoins",
+            args: [0n, BigInt(total - 1)], // Use total-1 as the finish index
+          })) as bigint[];
+          console.log(`Successfully fetched ${ids.length} token IDs:`, ids.map(id => id.toString()));
+        } catch (idsError) {
+          console.error("Error fetching coin IDs:", idsError);
+          // Try alternative approach - fetch coins one by one if batch failed
+          console.log("Attempting to fetch coins individually...");
+          const individualIds: bigint[] = [];
+          for (let i = 0; i < Math.min(total, 100); i++) { // Limit to first 100 in case of very large lists
+            try {
+              const coinId = await publicClient.readContract({
+                address: CoinchanAddress,
+                abi: CoinchanAbi,
+                functionName: "coins",
+                args: [BigInt(i)],
+              }) as bigint;
+              individualIds.push(coinId);
+            } catch (e) {
+              console.warn(`Failed to fetch coin at index ${i}`);
+            }
+          }
+          ids = individualIds;
+          console.log(`Fetched ${ids.length} coins individually`);
+        }
+        
+        if (ids.length === 0) {
+          console.warn("No coin IDs returned from contract");
+          setTokens([ETH_TOKEN]);
+          return;
+        }
+
+        // Fetch metadata for each token in parallel with batching
+        console.log("Fetching metadata for tokens...");
+        const BATCH_SIZE = 10; // Process in smaller batches to avoid rate limiting
+        const allTokenMetas: TokenMeta[] = [];
+        
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+          const batch = ids.slice(i, i + BATCH_SIZE);
+          console.log(`Processing batch ${i/BATCH_SIZE + 1}: ${batch.length} tokens`);
+          
+          const batchPromises = batch.map(async (id) => {
+            try {
+              // Query the COINS contract for token metadata
+              const [symbol, name] = await Promise.all([
+                publicClient.readContract({
+                  address: CoinsAddress,
+                  abi: CoinsAbi,
+                  functionName: "symbol",
+                  args: [id],
+                }).catch(e => `C#${id.toString()}`), // Fallback symbol
+                publicClient.readContract({
+                  address: CoinsAddress,
+                  abi: CoinsAbi,
+                  functionName: "name",
+                  args: [id],
+                }).catch(e => `Coin #${id.toString()}`) // Fallback name
+              ]) as [string, string];
+              
+              console.log(`Token ${id.toString()} metadata: ${symbol} - ${name}`);
+              return { id, name, symbol } satisfies TokenMeta;
+            } catch (err) {
+              console.warn(`Error fetching metadata for token ${id}:`, err);
+              // Fallback with a generic name if metadata fetch fails
+              return {
+                id,
+                name: `Coin #${id.toString()}`,
+                symbol: `C#${id.toString()}`,
+              } satisfies TokenMeta;
+            }
+          });
+          
+          const batchResults = await Promise.all(batchPromises);
+          allTokenMetas.push(...batchResults);
+          
+          // Update tokens incrementally as batches complete
+          setTokens(current => {
+            const currentIds = new Set(current.map(t => t.id?.toString()));
+            const newTokens = batchResults.filter(t => !currentIds.has(t.id?.toString()));
+            return [...current, ...newTokens];
+          });
+        }
+        
+        console.log(`Completed fetching metadata for ${allTokenMetas.length} tokens`);
+        
+        // Set the final token list with ETH first and deduplicated
+        const uniqueTokens = [ETH_TOKEN];
+        const seenIds = new Set<string>(["eth"]);
+        
+        allTokenMetas.forEach(token => {
+          const idStr = token.id?.toString();
+          if (idStr && !seenIds.has(idStr)) {
+            seenIds.add(idStr);
+            uniqueTokens.push(token);
           }
         });
-
-        // Wait for all metadata to be fetched
-        const metas = await Promise.all(metaPromises);
-        console.log(`Processed ${metas.length} tokens with metadata`);
         
-        // Set the tokens with ETH first
-        setTokens([ETH_TOKEN, ...metas]);
+        console.log(`Final token list contains ${uniqueTokens.length} unique tokens`);
+        setTokens(uniqueTokens);
       } catch (err) {
-        console.error("Error fetching tokens:", err);
+        console.error("Error in token fetching process:", err);
         setError(err instanceof Error ? err : new Error(String(err)));
         // Ensure we at least have ETH in the list
-        if (tokens.length === 0) {
+        if (tokens.length <= 1) {
           setTokens([ETH_TOKEN]);
         }
       } finally {
@@ -204,12 +270,35 @@ const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: Error |
 
     fetchTokens();
   }, [totalCoins, publicClient, isLoadingCount, isErrorCount]);
+  
+  // Add debug output to DOM if enabled
+  useEffect(() => {
+    if (debugInfo && typeof document !== "undefined") {
+      const existingDebug = document.getElementById("token-debug");
+      if (!existingDebug) {
+        const debugEl = document.createElement("div");
+        debugEl.id = "token-debug";
+        debugEl.style.position = "fixed";
+        debugEl.style.bottom = "0";
+        debugEl.style.left = "0";
+        debugEl.style.background = "rgba(0,0,0,0.7)";
+        debugEl.style.color = "white";
+        debugEl.style.padding = "10px";
+        debugEl.style.fontSize = "12px";
+        debugEl.style.zIndex = "9999";
+        debugEl.style.maxWidth = "100%";
+        debugEl.style.overflow = "auto";
+        document.body.appendChild(debugEl);
+      }
+      document.getElementById("token-debug")!.textContent = debugInfo;
+    }
+  }, [debugInfo]);
 
   return { tokens, loading, error };
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  Token dropdown component
+  Improved Token dropdown component with direct Radix UI integration
 ──────────────────────────────────────────────────────────────────────────── */
 const TokenSelector = ({
   token,
@@ -219,30 +308,66 @@ const TokenSelector = ({
   token: TokenMeta;
   tokens: TokenMeta[];
   onSelect: (t: TokenMeta) => void;
-}) => (
-  <Popover>
-    <PopoverTrigger asChild>
-      <Button variant="ghost" size="sm" className="gap-1 px-2 text-base">
-        {token.symbol}
-        <ChevronDown className="h-4 w-4 opacity-60" />
-      </Button>
-    </PopoverTrigger>
-    <PopoverContent side="bottom" align="start" className="p-0 w-48">
-      <ScrollArea className="h-64">
-        {tokens.map((t) => (
-          <button
-            key={`token-${t.id?.toString() ?? "eth"}`}
-            className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted"
-            onClick={() => onSelect(t)}
-          >
-            <span>{t.symbol}</span>
-            {t.symbol === token.symbol && <Check className="h-4 w-4" />}
-          </button>
-        ))}
-      </ScrollArea>
-    </PopoverContent>
-  </Popover>
-);
+}) => {
+  const [open, setOpen] = useState(false);
+  
+  // For debugging purposes
+  useEffect(() => {
+    if (open) {
+      console.log("TokenSelector opened with tokens:", tokens);
+    }
+  }, [open, tokens]);
+  
+  return (
+    <Popover open={open} onOpenChange={setOpen} modal={true}>
+      <PopoverTrigger asChild>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="gap-1 px-2 text-base border border-yellow-200 hover:bg-yellow-50"
+        >
+          {token.symbol}
+          <ChevronDown className="h-4 w-4 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent 
+        side="bottom" 
+        align="start" 
+        className="p-0 w-56 border-2 border-yellow-200 shadow-lg z-50 bg-white" 
+        sideOffset={5}
+        onEscapeKeyDown={() => setOpen(false)}
+        onPointerDownOutside={() => setOpen(false)}
+        style={{ pointerEvents: "auto" }}
+      >
+        {tokens.length <= 1 ? (
+          <div className="p-3 text-sm text-center text-muted-foreground">
+            No tokens available
+          </div>
+        ) : (
+          <div className="max-h-64 overflow-auto py-1">
+            {tokens.map((t) => (
+              <button
+                key={`token-${t.id?.toString() ?? "eth"}`}
+                className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-yellow-50"
+                onClick={() => {
+                  console.log("Selected token:", t);
+                  onSelect(t);
+                  setOpen(false);
+                }}
+              >
+                <div className="flex flex-col items-start">
+                  <span className="font-medium">{t.symbol}</span>
+                  {t.id !== null && <span className="text-xs text-muted-foreground truncate max-w-[150px]">{t.name}</span>}
+                </div>
+                {t.symbol === token.symbol && <Check className="h-4 w-4 text-yellow-500" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 /* ────────────────────────────────────────────────────────────────────────────
   SwapTile main component
@@ -288,7 +413,7 @@ export const SwapTile = () => {
     address: ZAAMAddress,
     abi: ZAAMAbi,
     functionName: "pools",
-    args: [BigInt(poolId)],
+    args: [poolId],
     chainId: 1,
     query: {
       enabled: !!canSwap,
@@ -433,30 +558,44 @@ export const SwapTile = () => {
   /* UI */
   if (loading)
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="ml-2">Loading tokens...</span>
+      <div className="flex flex-col items-center justify-center p-8 gap-2">
+        <div className="flex items-center">
+          <Loader2 className="h-5 w-5 animate-spin text-yellow-500" />
+          <span className="ml-2 font-medium">Loading tokens...</span>
+        </div>
+        <p className="text-sm text-muted-foreground">Please wait while we fetch available tokens</p>
       </div>
     );
 
   return (
-    <Card className="w-lg p-6 border-2 border-none outline-none shadow-sm">
+    <Card className="w-lg p-6 border-2 border-yellow-100 outline-none shadow-md rounded-xl">
       <CardContent className="p-1 flex flex-col space-y-1">
         {tokenLoadError && (
-          <div className="mb-2 p-2 text-sm text-red-500 bg-red-50 rounded">
-            Error loading tokens: {tokenLoadError.message}
+          <div className="mb-3 p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200 flex items-start">
+            <span className="mr-1">⚠️</span>
+            <div>
+              <p className="font-medium">Error loading tokens</p>
+              <p className="text-xs mt-1">{tokenLoadError.message}</p>
+            </div>
           </div>
         )}
         
-        {tokens.length <= 1 && !loading && (
-          <div className="mb-2 p-2 text-sm text-yellow-700 bg-yellow-50 rounded">
-            No tokens found. Only ETH is available.
+        {tokens.length <= 1 && !loading && !tokenLoadError && (
+          <div className="mb-3 p-3 text-sm text-yellow-700 bg-yellow-50 rounded-lg border border-yellow-200">
+            <p className="font-medium">No tokens found</p>
+            <p className="text-xs mt-1">Only ETH is available for swapping. Check back later for more tokens.</p>
           </div>
         )}
         
-        {tokens.length > 1 && (
-          <div className="mb-2 p-2 text-sm text-green-700 bg-green-50 rounded">
-            Loaded {tokens.length - 1} tokens successfully.
+        {tokens.length > 1 && !tokenLoadError && (
+          <div className="mb-3 p-3 text-sm text-green-700 bg-green-50 rounded-lg border border-green-200 flex items-center justify-between">
+            <div>
+              <p className="font-medium">Ready to swap</p>
+              <p className="text-xs mt-1">Loaded {tokens.length - 1} tokens successfully</p>
+            </div>
+            <div className="text-xs py-1 px-2 bg-green-100 rounded-full text-green-800 font-medium">
+              {tokens.length - 1} tokens
+            </div>
           </div>
         )}
 
