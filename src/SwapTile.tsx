@@ -282,23 +282,102 @@ const TokenSelector = ({
     return colorMap[initials] || { bg: 'bg-yellow-500', text: 'text-white' };
   };
   
-  // Custom token image display
+  // Custom token image display with JSON metadata handling
   const TokenImage = ({ token }: { token: TokenMeta }) => {
+    const [imageLoaded, setImageLoaded] = useState(false);
+    const [imageError, setImageError] = useState(false);
+    const [actualImageUrl, setActualImageUrl] = useState<string | null>(null);
     const { bg, text } = getColorForSymbol(token.symbol);
+    
+    // Try to fetch JSON metadata if the token URI might be a metadata URI
+    useEffect(() => {
+      const fetchMetadata = async () => {
+        if (!token.tokenUri) return;
+        
+        // Skip for data URIs like the ETH SVG
+        if (token.tokenUri.startsWith('data:')) {
+          setActualImageUrl(token.tokenUri);
+          return;
+        }
+        
+        try {
+          // Handle IPFS URIs
+          const uri = token.tokenUri.startsWith('ipfs://') 
+            ? `https://content.wrappr.wtf/ipfs/${token.tokenUri.slice(7)}` 
+            : token.tokenUri;
+            
+          // Try to fetch as JSON (might be metadata)
+          const response = await fetch(uri);
+          const contentType = response.headers.get('content-type');
+          
+          // If it's JSON, try to extract image URL
+          if (contentType && contentType.includes('application/json')) {
+            const data = await response.json();
+            if (data && data.image) {
+              // Handle IPFS image URL
+              const imageUrl = data.image.startsWith('ipfs://') 
+                ? `https://content.wrappr.wtf/ipfs/${data.image.slice(7)}` 
+                : data.image;
+                
+              setActualImageUrl(imageUrl);
+              return;
+            }
+          }
+          
+          // If not valid JSON or no image field, use the URI directly
+          setActualImageUrl(uri);
+        } catch (err) {
+          console.error(`Error fetching metadata for ${token.symbol}:`, err);
+          setImageError(true);
+        }
+      };
+      
+      fetchMetadata();
+    }, [token.tokenUri, token.symbol]);
+    
+    // If token has no URI, show colored initial
+    if (!token.tokenUri) {
+      return (
+        <div className={`w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
+          {getInitials(token.symbol)}
+        </div>
+      );
+    }
+    
+    // Show loading placeholder if we don't have the actual image URL yet
+    if (!actualImageUrl && !imageError) {
+      return (
+        <div className="relative w-8 h-8 rounded-full overflow-hidden">
+          <div className="w-8 h-8 flex bg-gray-200 justify-center items-center rounded-full">
+            <img 
+              src="/coinchan-logo.png" 
+              alt="Loading" 
+              className="w-6 h-6 object-contain opacity-50"
+            />
+          </div>
+        </div>
+      );
+    }
+    
+    // Otherwise, try to load the token image
     return (
-      <div className="w-8 h-8 flex-shrink-0 overflow-hidden rounded-full">
-        {token.id === null && token.symbol === "ETH" ? (
-          // ETH image (from data URI)
-          <img
-            src={token.tokenUri}
-            alt="ETH logo"
-            className="w-8 h-8 rounded-full"
-          />
-        ) : (
-          // Colored circle with initials
-          <div className={`w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
+      <div className="relative w-8 h-8 rounded-full overflow-hidden">
+        {/* Show colored initials while loading or on error */}
+        {(!imageLoaded || imageError) && (
+          <div className={`absolute inset-0 w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
             {getInitials(token.symbol)}
           </div>
+        )}
+        
+        {/* Actual token image */}
+        {actualImageUrl && !imageError && (
+          <img
+            src={actualImageUrl}
+            alt={`${token.symbol} logo`}
+            className={`w-8 h-8 object-cover rounded-full ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+          />
         )}
       </div>
     );
