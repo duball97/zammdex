@@ -298,7 +298,7 @@ const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: Error |
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  Improved Token dropdown component with direct Radix UI integration
+  Custom Token dropdown component (no shadcn Popover)
 ──────────────────────────────────────────────────────────────────────────── */
 const TokenSelector = ({
   token,
@@ -309,63 +309,88 @@ const TokenSelector = ({
   tokens: TokenMeta[];
   onSelect: (t: TokenMeta) => void;
 }) => {
-  const [open, setOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
-  // For debugging purposes
+  // Close the dropdown when clicking outside
   useEffect(() => {
-    if (open) {
-      console.log("TokenSelector opened with tokens:", tokens);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    
+    // Log the token list whenever the dropdown opens
+    if (isOpen) {
+      console.log("Custom dropdown opened with tokens:", tokens);
     }
-  }, [open, tokens]);
-  
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, tokens]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen} modal={true}>
-      <PopoverTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="gap-1 px-2 text-base border border-yellow-200 hover:bg-yellow-50"
-        >
-          {token.symbol}
-          <ChevronDown className="h-4 w-4 opacity-60" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent 
-        side="bottom" 
-        align="start" 
-        className="p-0 w-56 border-2 border-yellow-200 shadow-lg z-50 bg-white" 
-        sideOffset={5}
-        onEscapeKeyDown={() => setOpen(false)}
-        onPointerDownOutside={() => setOpen(false)}
-        style={{ pointerEvents: "auto" }}
+    <div className="relative" ref={dropdownRef}>
+      {/* Trigger Button */}
+      <button
+        type="button"
+        onClick={() => {
+          console.log("Token selector button clicked, setting isOpen to", !isOpen);
+          setIsOpen(!isOpen);
+        }}
+        className="inline-flex items-center gap-1 px-2 py-1 text-base rounded-md border border-yellow-200 hover:bg-yellow-50 focus:outline-none focus:ring-2 focus:ring-yellow-300"
       >
-        {tokens.length <= 1 ? (
-          <div className="p-3 text-sm text-center text-muted-foreground">
-            No tokens available
-          </div>
-        ) : (
-          <div className="max-h-64 overflow-auto py-1">
-            {tokens.map((t) => (
-              <button
-                key={`token-${t.id?.toString() ?? "eth"}`}
-                className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-yellow-50"
-                onClick={() => {
-                  console.log("Selected token:", t);
-                  onSelect(t);
-                  setOpen(false);
-                }}
-              >
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">{t.symbol}</span>
-                  {t.id !== null && <span className="text-xs text-muted-foreground truncate max-w-[150px]">{t.name}</span>}
-                </div>
-                {t.symbol === token.symbol && <Check className="h-4 w-4 text-yellow-500" />}
-              </button>
-            ))}
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+        {token.symbol}
+        <ChevronDown className="h-4 w-4 opacity-60" />
+      </button>
+      
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div 
+          className="absolute right-0 z-50 mt-1 w-56 rounded-md border-2 border-yellow-200 bg-white shadow-lg overflow-hidden"
+          style={{ maxHeight: '300px', overflowY: 'auto' }}
+        >
+          {tokens.length <= 1 ? (
+            <div className="p-3 text-sm text-center text-gray-500">
+              No tokens available
+            </div>
+          ) : (
+            <div className="py-1">
+              {tokens.map((t) => (
+                <button
+                  key={`token-${t.id?.toString() ?? "eth"}`}
+                  className="w-full text-left px-4 py-2 hover:bg-yellow-50 flex items-center justify-between"
+                  onClick={() => {
+                    console.log("Selected token:", t);
+                    onSelect(t);
+                    setIsOpen(false);
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">{t.symbol}</span>
+                    {t.id !== null && (
+                      <span className="text-xs text-gray-500 truncate max-w-[180px]">
+                        {t.name}
+                      </span>
+                    )}
+                  </div>
+                  {t.symbol === token.symbol && (
+                    <Check className="h-4 w-4 text-yellow-500" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -377,14 +402,27 @@ export const SwapTile = () => {
   const { tokens, loading, error: tokenLoadError } = useAllTokens();
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>("");
+
+  // Debug info for development
+  useEffect(() => {
+    setDebugInfo(`Tokens: ${tokens.length}, Loading: ${loading}, Error: ${tokenLoadError ? "Yes" : "No"}`);
+    console.log("SwapTile tokens:", tokens);
+    console.log("SwapTile loading:", loading);
+    console.log("SwapTile error:", tokenLoadError);
+  }, [tokens, loading, tokenLoadError]);
 
   // default buy token once list loads
   useEffect(() => {
-    if (!buyToken && tokens.length > 1) setBuyToken(tokens[1]);
+    if (!buyToken && tokens.length > 1) {
+      console.log("Setting default buy token:", tokens[1]);
+      setBuyToken(tokens[1]);
+    }
   }, [tokens, buyToken]);
 
   const flipTokens = () => {
     if (!buyToken) return;
+    console.log("Flipping tokens:", { sell: sellToken, buy: buyToken });
     setSellToken(buyToken);
     setBuyToken(sellToken);
   };
