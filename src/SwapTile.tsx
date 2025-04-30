@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useWriteContract,
   useWaitForTransactionReceipt,
@@ -23,12 +23,6 @@ import { ZAAMAbi, ZAAMAddress } from "./constants/ZAAM";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Check, ChevronDown, Loader2, ArrowDownUp } from "lucide-react";
 import { mainnet } from "viem/chains";
 
@@ -402,11 +396,9 @@ export const SwapTile = () => {
   const { tokens, loading, error: tokenLoadError } = useAllTokens();
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>("");
 
   // Debug info for development
   useEffect(() => {
-    setDebugInfo(`Tokens: ${tokens.length}, Loading: ${loading}, Error: ${tokenLoadError ? "Yes" : "No"}`);
     console.log("SwapTile tokens:", tokens);
     console.log("SwapTile loading:", loading);
     console.log("SwapTile error:", tokenLoadError);
@@ -436,28 +428,30 @@ export const SwapTile = () => {
   /* user inputs */
   const [sellAmt, setSellAmt] = useState("");
   const [buyAmt, setBuyAmt] = useState("");
-  const [txHash, setTxHash] = useState<`0x${string}`>();
+  const [txHash, setTxHash] = useState<string>();
 
   /* wagmi hooks */
   const { address, isConnected } = useAccount();
   const { writeContractAsync, isPending, error } = useWriteContract();
-  const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash as `0x${string}` });
   const { switchChain } = useSwitchChain();
   const chainId = useChainId();
 
   /* on‑chain reserves */
   const poolId = computePoolId(coinId);
-  const { data: reserves } = useReadContract({
+  const { data: rawReserves } = useReadContract({
     address: ZAAMAddress,
     abi: ZAAMAbi,
     functionName: "pools",
     args: [poolId],
     chainId: 1,
-    query: {
-      enabled: !!canSwap,
-      select: ([r0, r1]) => ({ reserve0: r0, reserve1: r1 }),
-    },
   });
+
+  // Process reserves into a more usable format
+  const reserves = rawReserves ? {
+    reserve0: rawReserves[0],
+    reserve1: rawReserves[1]
+  } : undefined;
 
   /* allowance for token sales */
   const { data: isOperator } = useReadContract({
@@ -607,6 +601,23 @@ export const SwapTile = () => {
 
   return (
     <Card className="w-lg p-6 border-2 border-yellow-100 outline-none shadow-md rounded-xl">
+      {/* Debug panel */}
+      <div className="mb-4 p-3 text-xs bg-gray-100 rounded-lg border border-gray-300">
+        <div className="font-bold mb-1">Debug Info:</div>
+        <div>Token Count: {tokens.length}</div>
+        <div>Loading: {loading ? 'Yes' : 'No'}</div>
+        <div>Error: {tokenLoadError ? tokenLoadError.message : 'None'}</div>
+        <div>Selected: {sellToken.symbol} → {buyToken?.symbol || 'None'}</div>
+        <div className="mt-2">
+          <details>
+            <summary className="cursor-pointer">Token List</summary>
+            <pre className="text-xs mt-1 p-2 bg-gray-200 rounded overflow-auto max-h-32">
+              {JSON.stringify(tokens.map(t => ({ id: t.id?.toString(), symbol: t.symbol })), null, 2)}
+            </pre>
+          </details>
+        </div>
+      </div>
+      
       <CardContent className="p-1 flex flex-col space-y-1">
         {tokenLoadError && (
           <div className="mb-3 p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200 flex items-start">
