@@ -87,7 +87,7 @@ export function createCoinSwapMulticall(
   const deadline = deadlineTimestamp();
   
   // Create the multicall array with functions to call
-  const multicallData: string[] = [
+  const multicallData: `0x${string}`[] = [
     // 1. First swap: sourceCoin → ETH (use ZAAM as the receiver to keep ETH for next swap)
     // This will consume the entire input amount of source coin
     encodeFunctionData({
@@ -101,7 +101,7 @@ export function createCoinSwapMulticall(
         ZAAMAddress, // Important: Send to the contract itself for second swap
         deadline,
       ],
-    }),
+    }) as `0x${string}`,
     
     // 2. Second swap: ETH → targetCoin
     // Use the expected ETH output from first swap (with safety margin)
@@ -116,7 +116,7 @@ export function createCoinSwapMulticall(
         receiver, // Send to the user
         deadline,
       ],
-    }),
+    }) as `0x${string}`,
     
     // 3. Recover any leftover source coins - likely none since we use full amount
     // but keep for safety in case of execution failure or unusual circumstances
@@ -128,7 +128,7 @@ export function createCoinSwapMulticall(
         sourceCoinId, // Source coin ID
         receiver, // Return any leftovers to the receiver
       ],
-    }),
+    }) as `0x${string}`,
     
     // 4. Recover any leftover ETH from the intermediate step
     // This is expected to happen if our ETH estimate isn't exact
@@ -140,7 +140,7 @@ export function createCoinSwapMulticall(
         0n, // ETH ID is always 0
         receiver, // Return any leftovers to the receiver
       ],
-    }),
+    }) as `0x${string}`,
     
     // 5. Recover any excess target coins (unlikely but possible)
     // This could happen if the contract has a transient balance of the target coin
@@ -152,7 +152,7 @@ export function createCoinSwapMulticall(
         targetCoinId, // Target coin ID
         receiver, // Return any leftovers to the receiver
       ],
-    }),
+    }) as `0x${string}`,
   ];
   
   return multicallData;
