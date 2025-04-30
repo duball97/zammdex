@@ -41,13 +41,26 @@ export interface TokenMeta {
   name: string;
   symbol: string;
   tokenUri?: string; // Added tokenUri field to display thumbnails
+  isLoading?: boolean; // Track if image is loading
 }
+
+// Inline SVG for ETH
+const ETH_SVG = `<svg fill="#000000" width="800px" height="800px" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<g fill-rule="evenodd">
+<path d="M16 32C7.163 32 0 24.837 0 16S7.163 0 16 0s16 7.163 16 16-7.163 16-16 16zm7.994-15.781L16.498 4 9 16.22l7.498 4.353 7.496-4.354zM24 17.616l-7.502 4.351L9 17.617l7.498 10.378L24 17.616z"/>
+<g fill-rule="nonzero">
+<path fill-opacity=".298" d="M16.498 4v8.87l7.497 3.35zm0 17.968v6.027L24 17.616z"/>
+<path fill-opacity=".801" d="M16.498 20.573l7.497-4.353-7.497-3.348z"/>
+<path fill-opacity=".298" d="M9 16.22l7.498 4.353v-7.701z"/>
+</g>
+</g>
+</svg>`;
 
 const ETH_TOKEN: TokenMeta = {
   id: null,
   name: "Ether",
   symbol: "ETH",
-  tokenUri: "https://ethereum.org/static/6b935ac0e6194247347855dc3d328e83/13c43/eth-diamond-black.png", // Ethereum logo
+  tokenUri: `data:image/svg+xml;base64,${btoa(ETH_SVG)}`, // Embed ETH SVG as data URI
 };
 
 const computePoolKey = (coinId: bigint) => ({
@@ -252,6 +265,52 @@ const TokenSelector = ({
     setIsOpen(false);
   };
   
+  // Custom token image component with loading state
+  const TokenImage = ({ token }: { token: TokenMeta }) => {
+    const [isImageLoading, setIsImageLoading] = useState(true);
+    const [hasError, setHasError] = useState(false);
+    
+    if (!token.tokenUri) {
+      return (
+        <div className="w-8 h-8 flex bg-yellow-500 text-white justify-center items-center rounded-full text-xs">
+          {token.symbol?.slice(0, 2)}
+        </div>
+      );
+    }
+    
+    return (
+      <div className="relative w-8 h-8 rounded-full overflow-hidden">
+        {/* Loading placeholder - coinchan logo */}
+        {isImageLoading && (
+          <img 
+            src="/coinchan-logo.png" 
+            alt="Loading" 
+            className="w-8 h-8 absolute top-0 left-0 object-cover rounded-full"
+          />
+        )}
+        
+        {/* Actual token image */}
+        <img 
+          src={token.tokenUri.startsWith('data:') ? token.tokenUri : token.tokenUri}
+          alt={token.symbol}
+          className={`w-8 h-8 object-cover rounded-full ${isImageLoading ? 'opacity-0' : 'opacity-100'}`}
+          onLoad={() => setIsImageLoading(false)}
+          onError={() => {
+            setIsImageLoading(false);
+            setHasError(true);
+          }}
+        />
+        
+        {/* Error fallback */}
+        {hasError && (
+          <div className="w-8 h-8 flex bg-red-500 text-white justify-center items-center rounded-full text-xs absolute top-0 left-0">
+            {token.symbol?.slice(0, 2)}
+          </div>
+        )}
+      </div>
+    );
+  };
+  
   return (
     <div className="relative">
       {/* Selected token display with thumbnail */}
@@ -259,15 +318,7 @@ const TokenSelector = ({
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50"
       >
-        <div className="w-6 h-6 flex-shrink-0">
-          {selectedToken.tokenUri ? (
-            <DisplayTokenUri tokenUri={selectedToken.tokenUri} symbol={selectedToken.symbol} />
-          ) : (
-            <div className="w-6 h-6 flex bg-yellow-500 text-white justify-center items-center rounded-full text-xs">
-              {selectedToken.symbol?.slice(0, 2)}
-            </div>
-          )}
-        </div>
+        <TokenImage token={selectedToken} />
         <span>{selectedToken.symbol}</span>
         <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -276,7 +327,7 @@ const TokenSelector = ({
       
       {/* Dropdown list with thumbnails */}
       {isOpen && (
-        <div className="absolute z-20 mt-1 w-48 max-h-64 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
+        <div className="absolute z-20 mt-1 w-64 max-h-80 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
           {tokens.map((token) => (
             <div 
               key={token.id?.toString() ?? "eth"}
@@ -288,15 +339,7 @@ const TokenSelector = ({
                   : ""
               }`}
             >
-              <div className="w-6 h-6 flex-shrink-0">
-                {token.tokenUri ? (
-                  <DisplayTokenUri tokenUri={token.tokenUri} symbol={token.symbol} />
-                ) : (
-                  <div className="w-6 h-6 flex bg-yellow-500 text-white justify-center items-center rounded-full text-xs">
-                    {token.symbol?.slice(0, 2)}
-                  </div>
-                )}
-              </div>
+              <TokenImage token={token} />
               <span>{token.symbol}</span>
             </div>
           ))}
