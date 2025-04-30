@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, ArrowDownUp } from "lucide-react";
 import { mainnet } from "viem/chains";
+import { DisplayTokenUri } from "./DisplayTokenUri";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -39,12 +40,14 @@ export interface TokenMeta {
   id: bigint | null; // null = ETH pseudo-token
   name: string;
   symbol: string;
+  tokenUri?: string; // Added tokenUri field to display thumbnails
 }
 
 const ETH_TOKEN: TokenMeta = {
   id: null,
   name: "Ether",
   symbol: "ETH",
+  tokenUri: "https://ethereum.org/static/6b935ac0e6194247347855dc3d328e83/13c43/eth-diamond-black.png", // Ethereum logo
 };
 
 const computePoolKey = (coinId: bigint) => ({
@@ -96,7 +99,7 @@ const getAmountIn = (
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  HOOK: Simplified approach to fetch all tokens
+  HOOK: Simplified approach to fetch all tokens with tokenUri
 ──────────────────────────────────────────────────────────────────────────── */
 const useAllTokens = () => {
   const publicClient = usePublicClient({ chainId: mainnet.id });
@@ -160,10 +163,10 @@ const useAllTokens = () => {
           return;
         }
 
-        // Step 3: Get metadata for each coin
+        // Step 3: Get metadata for each coin including tokenUri
         const tokenPromises = coinIds.map(async (id) => {
           try {
-            const [symbolResult, nameResult] = await Promise.allSettled([
+            const [symbolResult, nameResult, tokenUriResult] = await Promise.allSettled([
               publicClient.readContract({
                 address: CoinsAddress,
                 abi: CoinsAbi,
@@ -176,6 +179,12 @@ const useAllTokens = () => {
                 functionName: "name",
                 args: [id],
               }),
+              publicClient.readContract({
+                address: CoinsAddress,
+                abi: CoinsAbi,
+                functionName: "tokenURI", // Added tokenURI fetch
+                args: [id],
+              }),
             ]);
 
             const symbol = symbolResult.status === "fulfilled" 
@@ -185,14 +194,19 @@ const useAllTokens = () => {
             const name = nameResult.status === "fulfilled" 
               ? nameResult.value as string 
               : `Coin #${id.toString()}`;
+              
+            const tokenUri = tokenUriResult.status === "fulfilled"
+              ? tokenUriResult.value as string
+              : "";
 
-            return { id, symbol, name } as TokenMeta;
+            return { id, symbol, name, tokenUri } as TokenMeta;
           } catch (err) {
             console.error(`Failed to get metadata for coin ${id}:`, err);
             return { 
               id, 
               symbol: `C#${id.toString()}`, 
-              name: `Coin #${id.toString()}` 
+              name: `Coin #${id.toString()}`,
+              tokenUri: "" 
             } as TokenMeta;
           }
         });
@@ -218,7 +232,7 @@ const useAllTokens = () => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  SIMPLIFIED TOKEN SELECTOR: Using native <select> dropdown
+  ENHANCED TOKEN SELECTOR: With thumbnail display
 ──────────────────────────────────────────────────────────────────────────── */
 const TokenSelector = ({
   selectedToken,
@@ -229,45 +243,66 @@ const TokenSelector = ({
   tokens: TokenMeta[];
   onSelect: (token: TokenMeta) => void;
 }) => {
-  // Selected value is the token's ID as a string (or "eth" for ETH)
+  const [isOpen, setIsOpen] = useState(false);
   const selectedValue = selectedToken.id?.toString() ?? "eth";
   
   // Handle selection change
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    // Find the token object that matches the selected value
-    const selected = tokens.find(t => 
-      (t.id === null && value === "eth") || 
-      (t.id !== null && t.id.toString() === value)
-    );
-    
-    if (selected) {
-      console.log("Selected token:", selected);
-      onSelect(selected);
-    }
+  const handleSelect = (token: TokenMeta) => {
+    onSelect(token);
+    setIsOpen(false);
   };
   
   return (
-    <select 
-      value={selectedValue}
-      onChange={handleChange}
-      className="appearance-none bg-transparent border border-yellow-200 rounded-md px-2 py-1 pr-8 focus:outline-none focus:ring-2 focus:ring-yellow-300"
-      style={{ 
-        backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23D97706'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E\")",
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "right 0.5rem center",
-        backgroundSize: "1rem"
-      }}
-    >
-      {tokens.map((token) => (
-        <option 
-          key={token.id?.toString() ?? "eth"} 
-          value={token.id?.toString() ?? "eth"}
-        >
-          {token.symbol}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      {/* Selected token display with thumbnail */}
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50"
+      >
+        <div className="w-6 h-6 flex-shrink-0">
+          {selectedToken.tokenUri ? (
+            <DisplayTokenUri tokenUri={selectedToken.tokenUri} symbol={selectedToken.symbol} />
+          ) : (
+            <div className="w-6 h-6 flex bg-yellow-500 text-white justify-center items-center rounded-full text-xs">
+              {selectedToken.symbol?.slice(0, 2)}
+            </div>
+          )}
+        </div>
+        <span>{selectedToken.symbol}</span>
+        <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      
+      {/* Dropdown list with thumbnails */}
+      {isOpen && (
+        <div className="absolute z-20 mt-1 w-48 max-h-64 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
+          {tokens.map((token) => (
+            <div 
+              key={token.id?.toString() ?? "eth"}
+              onClick={() => handleSelect(token)}
+              className={`flex items-center gap-2 p-2 hover:bg-yellow-50 cursor-pointer ${
+                (token.id === null && selectedValue === "eth") || 
+                (token.id !== null && token.id.toString() === selectedValue)
+                  ? "bg-yellow-100"
+                  : ""
+              }`}
+            >
+              <div className="w-6 h-6 flex-shrink-0">
+                {token.tokenUri ? (
+                  <DisplayTokenUri tokenUri={token.tokenUri} symbol={token.symbol} />
+                ) : (
+                  <div className="w-6 h-6 flex bg-yellow-500 text-white justify-center items-center rounded-full text-xs">
+                    {token.symbol?.slice(0, 2)}
+                  </div>
+                )}
+              </div>
+              <span>{token.symbol}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
