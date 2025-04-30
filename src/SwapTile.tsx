@@ -279,6 +279,9 @@ export const SwapTile = () => {
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
   
+  // Get the public client for contract interactions
+  const publicClient = usePublicClient({ chainId: mainnet.id });
+  
   // Debug info
   const tokenCount = tokens.length;
   
