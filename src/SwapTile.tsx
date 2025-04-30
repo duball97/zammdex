@@ -35,15 +35,15 @@ import { mainnet } from "viem/chains";
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
 ──────────────────────────────────────────────────────────────────────────── */
-const SWAP_FEE = 100n; // 1 % pool fee
-const SLIPPAGE_BPS = 100n; // 1 % slippage tolerance
-const DEADLINE_SEC = 20 * 60; // 20 minutes
+const SWAP_FEE = 100n; // 1% pool fee
+const SLIPPAGE_BPS = 100n; // 1% slippage tolerance
+const DEADLINE_SEC = 20 * 60; // 20 minutes
 
 const withSlippage = (amount: bigint) =>
   (amount * (10000n - SLIPPAGE_BPS)) / 10000n;
 
 export interface TokenMeta {
-  id: bigint | null; // null ⇒ ETH pseudo‑token
+  id: bigint | null; // null ⇒ ETH pseudo‑token
   name: string;
   symbol: string;
 }
@@ -72,7 +72,7 @@ const computePoolId = (coinId: bigint) =>
     ),
   );
 
-// x*y=k AMM with fee — forward (amountIn → amountOut)
+// x*y=k AMM with fee — forward (amountIn → amountOut)
 const getAmountOut = (
   amountIn: bigint,
   reserveIn: bigint,
@@ -85,7 +85,7 @@ const getAmountOut = (
   return numerator / denominator;
 };
 
-// inverse — desired amountOut → required amountIn
+// inverse — desired amountOut → required amountIn
 const getAmountIn = (
   amountOut: bigint,
   reserveIn: bigint,
@@ -94,73 +94,118 @@ const getAmountIn = (
 ) => {
   const numerator = reserveIn * amountOut * 10000n;
   const denominator = (reserveOut - amountOut) * (10000n - swapFee);
-  return numerator / denominator + 1n; // +1 for ceiling rounding
+  return numerator / denominator + 1n; // +1 for ceiling rounding
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  HOOK: fetch all Coinchan tokens once
+  HOOK: fetch all Coinchan tokens once with error handling
 ──────────────────────────────────────────────────────────────────────────── */
-const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean } => {
+const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: Error | null } => {
   const publicClient = usePublicClient({ chainId: 1 });
-  const { data: totalCoins } = useReadContract({
+  const [tokens, setTokens] = useState<TokenMeta[]>([ETH_TOKEN]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  // Get the total count of tokens
+  const { data: totalCoins, isLoading: isLoadingCount, isError: isErrorCount } = useReadContract({
     address: CoinchanAddress,
     abi: CoinchanAbi,
     functionName: "getCoinsCount",
     chainId: 1,
   });
 
-  const [tokens, setTokens] = useState<TokenMeta[]>([]);
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
-    (async () => {
-      try {
-        const total = Number(totalCoins ?? 0n);
-        if (total === 0) return setTokens([ETH_TOKEN]);
+    // Reset error state on refetch
+    setError(null);
 
+    // Only proceed if we have the token count and the public client
+    if (isLoadingCount || isErrorCount || totalCoins === undefined || !publicClient) {
+      if (isErrorCount) {
+        setError(new Error("Failed to get token count"));
+        setLoading(false);
+      }
+      return;
+    }
+
+    const fetchTokens = async () => {
+      try {
+        console.log(`Fetching ${totalCoins} tokens from Coinchan`);
+        const total = Number(totalCoins || 0n);
+        
+        // If no tokens, just return ETH
+        if (total === 0) {
+          setTokens([ETH_TOKEN]);
+          return;
+        }
+
+        // Fetch all coin IDs from coinchan
+        // The contract handles range checking internally, so if we pass
+        // [0, total], it will cap the range at [0, total-1] if needed
         const ids: bigint[] = (await publicClient.readContract({
           address: CoinchanAddress,
           abi: CoinchanAbi,
           functionName: "getCoins",
-          args: [0n, BigInt(total)],
+          args: [0n, BigInt(total - 1)], // Use total-1 as the finish index
         })) as bigint[];
 
-        const metas = await Promise.all(
-          ids.map(async (id) => {
-            try {
-              const [symbol, name] = (await Promise.all([
-                publicClient.readContract({
-                  address: CoinsAddress,
-                  abi: CoinsAbi,
-                  functionName: "symbol",
-                  args: [id],
-                }),
-                publicClient.readContract({
-                  address: CoinsAddress,
-                  abi: CoinsAbi,
-                  functionName: "name",
-                  args: [id],
-                }),
-              ])) as [string, string];
-              return { id, name, symbol } satisfies TokenMeta;
-            } catch {
-              return {
-                id,
-                name: `Coin #${id}`,
-                symbol: `C#${id}`,
-              } satisfies TokenMeta;
-            }
-          }),
-        );
+        console.log(`Fetched ${ids.length} token IDs`);
+        
+        // Fetch metadata for each token in parallel
+        const metaPromises = ids.map(async (id) => {
+          try {
+            // Query the COINS contract for token metadata
+            const results = await Promise.all([
+              publicClient.readContract({
+                address: CoinsAddress,
+                abi: CoinsAbi,
+                functionName: "symbol",
+                args: [id],
+              }),
+              publicClient.readContract({
+                address: CoinsAddress,
+                abi: CoinsAbi,
+                functionName: "name",
+                args: [id],
+              }),
+            ]);
+            
+            const symbol = results[0] as string;
+            const name = results[1] as string;
+            
+            return { id, name, symbol } satisfies TokenMeta;
+          } catch (err) {
+            console.warn(`Error fetching metadata for token ${id}:`, err);
+            // Fallback with a generic name if metadata fetch fails
+            return {
+              id,
+              name: `Coin #${id.toString()}`,
+              symbol: `C#${id.toString()}`,
+            } satisfies TokenMeta;
+          }
+        });
 
+        // Wait for all metadata to be fetched
+        const metas = await Promise.all(metaPromises);
+        console.log(`Processed ${metas.length} tokens with metadata`);
+        
+        // Set the tokens with ETH first
         setTokens([ETH_TOKEN, ...metas]);
+      } catch (err) {
+        console.error("Error fetching tokens:", err);
+        setError(err instanceof Error ? err : new Error(String(err)));
+        // Ensure we at least have ETH in the list
+        if (tokens.length === 0) {
+          setTokens([ETH_TOKEN]);
+        }
       } finally {
         setLoading(false);
       }
-    })();
-  }, [totalCoins, publicClient]);
+    };
 
-  return { tokens, loading };
+    fetchTokens();
+  }, [totalCoins, publicClient, isLoadingCount, isErrorCount]);
+
+  return { tokens, loading, error };
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -186,7 +231,7 @@ const TokenSelector = ({
       <ScrollArea className="h-64">
         {tokens.map((t) => (
           <button
-            key={t.id ?? -1n}
+            key={`token-${t.id?.toString() ?? "eth"}`}
             className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted"
             onClick={() => onSelect(t)}
           >
@@ -204,7 +249,7 @@ const TokenSelector = ({
 ──────────────────────────────────────────────────────────────────────────── */
 export const SwapTile = () => {
   /* token list */
-  const { tokens, loading } = useAllTokens();
+  const { tokens, loading, error: tokenLoadError } = useAllTokens();
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
 
@@ -390,12 +435,31 @@ export const SwapTile = () => {
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="ml-2">Loading tokens...</span>
       </div>
     );
 
   return (
     <Card className="w-lg p-6 border-2 border-none outline-none shadow-sm">
       <CardContent className="p-1 flex flex-col space-y-1">
+        {tokenLoadError && (
+          <div className="mb-2 p-2 text-sm text-red-500 bg-red-50 rounded">
+            Error loading tokens: {tokenLoadError.message}
+          </div>
+        )}
+        
+        {tokens.length <= 1 && !loading && (
+          <div className="mb-2 p-2 text-sm text-yellow-700 bg-yellow-50 rounded">
+            No tokens found. Only ETH is available.
+          </div>
+        )}
+        
+        {tokens.length > 1 && (
+          <div className="mb-2 p-2 text-sm text-green-700 bg-green-50 rounded">
+            Loaded {tokens.length - 1} tokens successfully.
+          </div>
+        )}
+
         {/* SELL + FLIP + BUY panel container */}
         <div className="relative flex flex-col">
           {/* SELL panel */}
