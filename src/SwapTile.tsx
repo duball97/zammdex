@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { mainnet } from "viem/chains";import { useState, useEffect } from "react";
 import {
   useWriteContract,
   useWaitForTransactionReceipt,
@@ -23,7 +23,6 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, ArrowDownUp } from "lucide-react";
-import { mainnet } from "viem/chains";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -39,12 +38,26 @@ export interface TokenMeta {
   id: bigint | null; // null = ETH pseudo-token
   name: string;
   symbol: string;
+  tokenUri?: string; // Added tokenUri field to display thumbnails
 }
+
+// Inline SVG for ETH
+const ETH_SVG = `<svg fill="#000000" width="800px" height="800px" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<g fill-rule="evenodd">
+<path d="M16 32C7.163 32 0 24.837 0 16S7.163 0 16 0s16 7.163 16 16-7.163 16-16 16zm7.994-15.781L16.498 4 9 16.22l7.498 4.353 7.496-4.354zM24 17.616l-7.502 4.351L9 17.617l7.498 10.378L24 17.616z"/>
+<g fill-rule="nonzero">
+<path fill-opacity=".298" d="M16.498 4v8.87l7.497 3.35zm0 17.968v6.027L24 17.616z"/>
+<path fill-opacity=".801" d="M16.498 20.573l7.497-4.353-7.497-3.348z"/>
+<path fill-opacity=".298" d="M9 16.22l7.498 4.353v-7.701z"/>
+</g>
+</g>
+</svg>`;
 
 const ETH_TOKEN: TokenMeta = {
   id: null,
   name: "Ether",
   symbol: "ETH",
+  tokenUri: `data:image/svg+xml;base64,${btoa(ETH_SVG)}`, // Embed ETH SVG as data URI
 };
 
 const computePoolKey = (coinId: bigint) => ({
@@ -96,7 +109,7 @@ const getAmountIn = (
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  HOOK: Simplified approach to fetch all tokens
+  HOOK: Simplified approach to fetch all tokens with tokenUri
 ──────────────────────────────────────────────────────────────────────────── */
 const useAllTokens = () => {
   const publicClient = usePublicClient({ chainId: mainnet.id });
@@ -160,10 +173,10 @@ const useAllTokens = () => {
           return;
         }
 
-        // Step 3: Get metadata for each coin
+        // Step 3: Get metadata for each coin including tokenUri
         const tokenPromises = coinIds.map(async (id) => {
           try {
-            const [symbolResult, nameResult] = await Promise.allSettled([
+            const [symbolResult, nameResult, tokenUriResult] = await Promise.allSettled([
               publicClient.readContract({
                 address: CoinsAddress,
                 abi: CoinsAbi,
@@ -176,6 +189,12 @@ const useAllTokens = () => {
                 functionName: "name",
                 args: [id],
               }),
+              publicClient.readContract({
+                address: CoinsAddress,
+                abi: CoinsAbi,
+                functionName: "tokenURI", // Added tokenURI fetch
+                args: [id],
+              }),
             ]);
 
             const symbol = symbolResult.status === "fulfilled" 
@@ -185,14 +204,19 @@ const useAllTokens = () => {
             const name = nameResult.status === "fulfilled" 
               ? nameResult.value as string 
               : `Coin #${id.toString()}`;
+              
+            const tokenUri = tokenUriResult.status === "fulfilled"
+              ? tokenUriResult.value as string
+              : "";
 
-            return { id, symbol, name } as TokenMeta;
+            return { id, symbol, name, tokenUri } as TokenMeta;
           } catch (err) {
             console.error(`Failed to get metadata for coin ${id}:`, err);
             return { 
               id, 
               symbol: `C#${id.toString()}`, 
-              name: `Coin #${id.toString()}` 
+              name: `Coin #${id.toString()}`,
+              tokenUri: "" 
             } as TokenMeta;
           }
         });
@@ -218,7 +242,7 @@ const useAllTokens = () => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  SIMPLIFIED TOKEN SELECTOR: Using native <select> dropdown
+  ENHANCED TOKEN SELECTOR: With thumbnail display
 ──────────────────────────────────────────────────────────────────────────── */
 const TokenSelector = ({
   selectedToken,
@@ -229,45 +253,174 @@ const TokenSelector = ({
   tokens: TokenMeta[];
   onSelect: (token: TokenMeta) => void;
 }) => {
-  // Selected value is the token's ID as a string (or "eth" for ETH)
+  const [isOpen, setIsOpen] = useState(false);
   const selectedValue = selectedToken.id?.toString() ?? "eth";
   
   // Handle selection change
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    // Find the token object that matches the selected value
-    const selected = tokens.find(t => 
-      (t.id === null && value === "eth") || 
-      (t.id !== null && t.id.toString() === value)
-    );
+  const handleSelect = (token: TokenMeta) => {
+    onSelect(token);
+    setIsOpen(false);
+  };
+  
+  // Get initials for fallback display
+  const getInitials = (symbol: string) => {
+    return symbol.slice(0, 2).toUpperCase();
+  };
+  
+  // Color map for token initials - matching your screenshot
+  const getColorForSymbol = (symbol: string) => {
+    const symbolKey = symbol.toLowerCase();
+    const colorMap: Record<string, { bg: string, text: string }> = {
+      'eth': { bg: 'bg-black', text: 'text-white' },
+      'za': { bg: 'bg-red-500', text: 'text-white' },
+      'pe': { bg: 'bg-green-700', text: 'text-white' },
+      'ro': { bg: 'bg-red-700', text: 'text-white' },
+      '..': { bg: 'bg-gray-800', text: 'text-white' },
+    };
     
-    if (selected) {
-      console.log("Selected token:", selected);
-      onSelect(selected);
+    const initials = symbolKey.slice(0, 2);
+    return colorMap[initials] || { bg: 'bg-yellow-500', text: 'text-white' };
+  };
+  
+  // Custom token image display with JSON metadata handling
+  const TokenImage = ({ token }: { token: TokenMeta }) => {
+    const [imageLoaded, setImageLoaded] = useState(false);
+    const [imageError, setImageError] = useState(false);
+    const [actualImageUrl, setActualImageUrl] = useState<string | null>(null);
+    const { bg, text } = getColorForSymbol(token.symbol);
+    
+    // Try to fetch JSON metadata if the token URI might be a metadata URI
+    useEffect(() => {
+      const fetchMetadata = async () => {
+        if (!token.tokenUri) return;
+        
+        // Skip for data URIs like the ETH SVG
+        if (token.tokenUri.startsWith('data:')) {
+          setActualImageUrl(token.tokenUri);
+          return;
+        }
+        
+        try {
+          // Handle IPFS URIs
+          const uri = token.tokenUri.startsWith('ipfs://') 
+            ? `https://content.wrappr.wtf/ipfs/${token.tokenUri.slice(7)}` 
+            : token.tokenUri;
+            
+          // Try to fetch as JSON (might be metadata)
+          const response = await fetch(uri);
+          const contentType = response.headers.get('content-type');
+          
+          // If it's JSON, try to extract image URL
+          if (contentType && contentType.includes('application/json')) {
+            const data = await response.json();
+            if (data && data.image) {
+              // Handle IPFS image URL
+              const imageUrl = data.image.startsWith('ipfs://') 
+                ? `https://content.wrappr.wtf/ipfs/${data.image.slice(7)}` 
+                : data.image;
+                
+              setActualImageUrl(imageUrl);
+              return;
+            }
+          }
+          
+          // If not valid JSON or no image field, use the URI directly
+          setActualImageUrl(uri);
+        } catch (err) {
+          console.error(`Error fetching metadata for ${token.symbol}:`, err);
+          setImageError(true);
+        }
+      };
+      
+      fetchMetadata();
+    }, [token.tokenUri, token.symbol]);
+    
+    // If token has no URI, show colored initial
+    if (!token.tokenUri) {
+      return (
+        <div className={`w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
+          {getInitials(token.symbol)}
+        </div>
+      );
     }
+    
+    // Show loading placeholder if we don't have the actual image URL yet
+    if (!actualImageUrl && !imageError) {
+      return (
+        <div className="relative w-8 h-8 rounded-full overflow-hidden">
+          <div className="w-8 h-8 flex bg-gray-200 justify-center items-center rounded-full">
+            <img 
+              src="/coinchan-logo.png" 
+              alt="Loading" 
+              className="w-6 h-6 object-contain opacity-50"
+            />
+          </div>
+        </div>
+      );
+    }
+    
+    // Otherwise, try to load the token image
+    return (
+      <div className="relative w-8 h-8 rounded-full overflow-hidden">
+        {/* Show colored initials while loading or on error */}
+        {(!imageLoaded || imageError) && (
+          <div className={`absolute inset-0 w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
+            {getInitials(token.symbol)}
+          </div>
+        )}
+        
+        {/* Actual token image */}
+        {actualImageUrl && !imageError && (
+          <img
+            src={actualImageUrl}
+            alt={`${token.symbol} logo`}
+            className={`w-8 h-8 object-cover rounded-full ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+          />
+        )}
+      </div>
+    );
   };
   
   return (
-    <select 
-      value={selectedValue}
-      onChange={handleChange}
-      className="appearance-none bg-transparent border border-yellow-200 rounded-md px-2 py-1 pr-8 focus:outline-none focus:ring-2 focus:ring-yellow-300"
-      style={{ 
-        backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23D97706'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E\")",
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "right 0.5rem center",
-        backgroundSize: "1rem"
-      }}
-    >
-      {tokens.map((token) => (
-        <option 
-          key={token.id?.toString() ?? "eth"} 
-          value={token.id?.toString() ?? "eth"}
-        >
-          {token.symbol}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      {/* Selected token display with thumbnail */}
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50"
+      >
+        <TokenImage token={selectedToken} />
+        <span className="font-medium">{selectedToken.symbol}</span>
+        <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      
+      {/* Dropdown list with thumbnails */}
+      {isOpen && (
+        <div className="absolute z-20 mt-1 w-64 max-h-96 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
+          {tokens.map((token) => {
+            const isSelected = 
+              (token.id === null && selectedValue === "eth") || 
+              (token.id !== null && token.id.toString() === selectedValue);
+            
+            return (
+              <div 
+                key={token.id?.toString() ?? "eth"}
+                onClick={() => handleSelect(token)}
+                className={`flex items-center gap-2 p-2 hover:bg-yellow-50 cursor-pointer ${
+                  isSelected ? "bg-yellow-100" : ""
+                }`}
+              >
+                <TokenImage token={token} />
+                <span className="font-medium">{token.symbol}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 };
 
