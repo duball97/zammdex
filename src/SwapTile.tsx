@@ -24,6 +24,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, ArrowDownUp } from "lucide-react";
 import { mainnet } from "viem/chains";
+// Import your DisplayTokenUri component
+import { DisplayTokenUri } from "./DisplayTokenUri";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
