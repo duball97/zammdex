@@ -24,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, ArrowDownUp } from "lucide-react";
 import { mainnet } from "viem/chains";
-import { DisplayTokenUri } from "./DisplayTokenUri";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -269,6 +268,36 @@ const TokenSelector = ({
   const TokenImage = ({ token }: { token: TokenMeta }) => {
     const [isImageLoading, setIsImageLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
+    const [tokenImage, setTokenImage] = useState<string | null>(null);
+    
+    // For JSON metadata handling
+    useEffect(() => {
+      const fetchTokenMetadata = async () => {
+        if (!token.tokenUri || token.tokenUri.startsWith('data:')) return;
+        
+        if (token.tokenUri.startsWith('http') || token.tokenUri.startsWith('https')) {
+          try {
+            const response = await fetch(token.tokenUri);
+            const data = await response.json();
+            
+            if (data && data.image) {
+              // Handle IPFS URLs
+              let imageUrl = data.image;
+              if (imageUrl.startsWith('ipfs://')) {
+                imageUrl = `https://content.wrappr.wtf/ipfs/${imageUrl.slice(7)}`;
+              }
+              setTokenImage(imageUrl);
+            }
+          } catch (err) {
+            console.error(`Failed to fetch token metadata for ${token.symbol}:`, err);
+            setHasError(true);
+            setIsImageLoading(false);
+          }
+        }
+      };
+      
+      fetchTokenMetadata();
+    }, [token.tokenUri, token.symbol]);
     
     if (!token.tokenUri) {
       return (
@@ -277,6 +306,9 @@ const TokenSelector = ({
         </div>
       );
     }
+    
+    // For data URIs (like ETH SVG) or direct image URLs
+    const imageSource = tokenImage || (token.tokenUri.startsWith('data:') ? token.tokenUri : token.tokenUri);
     
     return (
       <div className="relative w-8 h-8 rounded-full overflow-hidden">
@@ -291,9 +323,9 @@ const TokenSelector = ({
         
         {/* Actual token image */}
         <img 
-          src={token.tokenUri.startsWith('data:') ? token.tokenUri : token.tokenUri}
+          src={imageSource}
           alt={token.symbol}
-          className={`w-8 h-8 object-cover rounded-full ${isImageLoading ? 'opacity-0' : 'opacity-100'}`}
+          className={`w-8 h-8 object-cover rounded-full ${isImageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}
           onLoad={() => setIsImageLoading(false)}
           onError={() => {
             setIsImageLoading(false);
