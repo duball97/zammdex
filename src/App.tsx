@@ -9,13 +9,26 @@ import SwapTile from "./SwapTile";
 
 function App() {
   const [view, setView] = useState<"menu" | "form" | "memepaper" | "swap">(
-    "menu",
+    "swap",
   );
   const [tapCount, setTapCount] = useState(0);
   const [lastTap, setLastTap] = useState(0);
 
   useEffect(() => {
     sdk.actions.ready();
+    
+    // Listen for custom view change events
+    const handleViewChange = (event: CustomEvent) => {
+      if (event.detail && typeof event.detail === 'string') {
+        setView(event.detail as "menu" | "form" | "memepaper" | "swap");
+      }
+    };
+    
+    window.addEventListener('coinchan:setView', handleViewChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('coinchan:setView', handleViewChange as EventListener);
+    };
   }, []);
 
   const handleLogoTap = (e: React.MouseEvent | React.TouchEvent) => {
@@ -43,7 +56,7 @@ function App() {
   return (
     <main className="p-3 min-h-screen w-screen flex flex-col justify-center items-center">
       <div>
-        <header>
+        <header className="flex justify-end w-full">
           <ConnectMenu />
         </header>
         <img

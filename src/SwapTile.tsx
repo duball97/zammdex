@@ -823,6 +823,21 @@ export const SwapTile = () => {
         {isSuccess && (
           <div className="text-sm text-green-600 mt-2">Transaction confirmed!</div>
         )}
+        
+        {/* Subtle explorer link */}
+        <div className="text-xs text-gray-400 mt-4 text-center">
+          <a 
+            href="#" 
+            onClick={(e) => {
+              e.preventDefault();
+              // This assumes App.tsx has access to this function via props
+              window.dispatchEvent(new CustomEvent('coinchan:setView', { detail: 'menu' }));
+            }} 
+            className="hover:text-gray-600 hover:underline"
+          >
+            View all coins in explorer
+          </a>
+        </div>
       </CardContent>
     </Card>
   );
