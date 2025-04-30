@@ -3,7 +3,6 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useAccount,
-  useReadContract,
   usePublicClient,
   useSwitchChain,
   useChainId,
@@ -23,13 +22,7 @@ import { ZAAMAbi, ZAAMAddress } from "./constants/ZAAM";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Check, ChevronDown, Loader2, ArrowDownUp } from "lucide-react";
+import { Loader2, ArrowDownUp } from "lucide-react";
 import { mainnet } from "viem/chains";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -103,125 +96,73 @@ const getAmountIn = (
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  HOOK: fetch all Coinchan tokens once - ROBUST VERSION
+  HOOK: Simplified approach to fetch all tokens
 ──────────────────────────────────────────────────────────────────────────── */
-const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: string | null } => {
+const useAllTokens = () => {
   const publicClient = usePublicClient({ chainId: mainnet.id });
-  const chainId = useChainId();
   const [tokens, setTokens] = useState<TokenMeta[]>([ETH_TOKEN]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch coin count directly - don't use useReadContract to avoid cached results
-  const fetchTokens = async () => {
-    console.log("Starting token fetch process");
-    setLoading(true);
-    setError(null);
-    
-    if (!publicClient) {
-      console.error("No public client available");
-      setError("No wallet connection available");
-      setLoading(false);
-      return;
-    }
-    
-    if (chainId !== mainnet.id) {
-      console.log(`Connected to chain ${chainId}, need mainnet (1)`);
-      setError("Please connect to Ethereum mainnet");
-      setLoading(false);
-      return;
-    }
-    
-    try {
-      // Step 1: Get the total number of coins
-      console.log("Fetching coin count...");
-      const totalCoins = await publicClient.readContract({
-        address: CoinchanAddress,
-        abi: CoinchanAbi,
-        functionName: "getCoinsCount",
-      });
-      
-      const total = Number(totalCoins);
-      console.log(`Total coins in contract: ${total}`);
-      
-      if (total === 0) {
-        console.log("No coins found in contract");
-        setTokens([ETH_TOKEN]);
+  useEffect(() => {
+    const fetchTokens = async () => {
+      if (!publicClient) {
+        setError("No wallet connection available");
         setLoading(false);
         return;
       }
-      
-      // Step 2: Fetch all coins in batches to prevent timeout
-      const BATCH_SIZE = 10;
-      let allIds: bigint[] = [];
-      
-      for (let start = 0; start < total; start += BATCH_SIZE) {
-        const end = Math.min(start + BATCH_SIZE - 1, total - 1);
-        console.log(`Fetching coins from ${start} to ${end}...`);
-        
-        try {
-          const batchIds = await publicClient.readContract({
-            address: CoinchanAddress,
-            abi: CoinchanAbi,
-            functionName: "getCoins",
-            args: [BigInt(start), BigInt(end)],
-          }) as bigint[];
-          
-          console.log(`Retrieved ${batchIds.length} coins from batch ${start}-${end}:`, batchIds);
-          allIds = [...allIds, ...batchIds];
-        } catch (err) {
-          console.error(`Failed to fetch coins batch ${start}-${end}:`, err);
-          
-          // Fallback to individual coin fetching for this batch
-          for (let i = start; i <= end; i++) {
-            try {
-              const id = await publicClient.readContract({
-                address: CoinchanAddress,
-                abi: CoinchanAbi,
-                functionName: "coins",
-                args: [BigInt(i)],
-              }) as bigint;
-              
-              console.log(`Retrieved individual coin at index ${i}:`, id);
-              allIds.push(id);
-            } catch (coinErr) {
-              console.error(`Failed to get coin at index ${i}:`, coinErr);
-            }
+
+      try {
+        // Step 1: Get total coins count
+        console.log("Fetching coin count...");
+        const countResult = await publicClient.readContract({
+          address: CoinchanAddress,
+          abi: CoinchanAbi,
+          functionName: "getCoinsCount",
+        });
+        const count = Number(countResult);
+        console.log(`Contract reports ${count} total coins`);
+
+        // Step 2: Get all coins directly using indices instead of getCoins
+        const coinPromises = [];
+        const displayLimit = Math.min(count, 100); // Limit to first 100 for safety
+
+        for (let i = 0; i < displayLimit; i++) {
+          coinPromises.push(
+            publicClient.readContract({
+              address: CoinchanAddress,
+              abi: CoinchanAbi,
+              functionName: "coins", // Direct array access - faster and more reliable
+              args: [BigInt(i)],
+            })
+          );
+        }
+
+        console.log(`Fetching ${coinPromises.length} individual coins...`);
+        const coinResults = await Promise.allSettled(coinPromises);
+        const coinIds: bigint[] = [];
+
+        for (let i = 0; i < coinResults.length; i++) {
+          const result = coinResults[i];
+          if (result.status === "fulfilled") {
+            coinIds.push(result.value as bigint);
+          } else {
+            console.error(`Failed to fetch coin at index ${i}:`, result.reason);
           }
         }
-      }
-      
-      console.log(`Successfully retrieved ${allIds.length} coin IDs out of ${total} total`);
-      
-      if (allIds.length === 0) {
-        console.log("No valid coin IDs retrieved");
-        setTokens([ETH_TOKEN]);
-        setLoading(false);
-        return;
-      }
-      
-      // Step 3: Get metadata for each coin ID in parallel batches
-      const METADATA_BATCH_SIZE = 5;
-      const allTokens: TokenMeta[] = [ETH_TOKEN];
-      const uniqueIds = new Set<string>();
-      
-      for (let i = 0; i < allIds.length; i += METADATA_BATCH_SIZE) {
-        const batch = allIds.slice(i, i + METADATA_BATCH_SIZE);
-        const batchPromises = batch.map(async (id) => {
-          const idStr = id.toString();
-          
-          // Skip duplicates
-          if (uniqueIds.has(idStr)) {
-            console.log(`Skipping duplicate coin ID: ${idStr}`);
-            return null;
-          }
-          
-          uniqueIds.add(idStr);
-          
+
+        console.log(`Successfully retrieved ${coinIds.length} coin IDs`);
+
+        if (coinIds.length === 0) {
+          console.log("No coins found, using ETH only");
+          setTokens([ETH_TOKEN]);
+          setLoading(false);
+          return;
+        }
+
+        // Step 3: Get metadata for each coin
+        const tokenPromises = coinIds.map(async (id) => {
           try {
-            console.log(`Fetching metadata for coin ID ${idStr}...`);
-            
-            // Try to get symbol and name in parallel
             const [symbolResult, nameResult] = await Promise.allSettled([
               publicClient.readContract({
                 address: CoinsAddress,
@@ -236,108 +177,112 @@ const useAllTokens = (): { tokens: TokenMeta[]; loading: boolean; error: string 
                 args: [id],
               }),
             ]);
-            
-            // Extract results with fallbacks
+
             const symbol = symbolResult.status === "fulfilled" 
               ? symbolResult.value as string 
-              : `C#${idStr}`;
+              : `C#${id.toString()}`;
               
             const name = nameResult.status === "fulfilled" 
               ? nameResult.value as string 
-              : `Coin #${idStr}`;
-            
-            console.log(`Metadata for ${idStr}: ${symbol} (${name})`);
+              : `Coin #${id.toString()}`;
+
             return { id, symbol, name } as TokenMeta;
           } catch (err) {
-            console.error(`Failed to get metadata for coin ${idStr}:`, err);
-            // Still return a token with fallback metadata
+            console.error(`Failed to get metadata for coin ${id}:`, err);
             return { 
               id, 
-              symbol: `C#${idStr}`, 
-              name: `Coin #${idStr}` 
+              symbol: `C#${id.toString()}`, 
+              name: `Coin #${id.toString()}` 
             } as TokenMeta;
           }
         });
-        
-        const batchResults = await Promise.all(batchPromises);
-        const validTokens = batchResults.filter(Boolean) as TokenMeta[];
-        allTokens.push(...validTokens);
-        
-        // Update tokens incrementally as we go
-        setTokens([...allTokens]);
-      }
-      
-      console.log(`Final token list: ${allTokens.length} tokens`);
-      setTokens(allTokens);
-    } catch (err) {
-      console.error("Fatal error in token loading:", err);
-      setError("Failed to load tokens. Check console for details.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  // Run token fetching on component mount and when chain changes
-  useEffect(() => {
+        console.log("Fetching token metadata...");
+        const tokenResults = await Promise.all(tokenPromises);
+        const allTokens = [ETH_TOKEN, ...tokenResults];
+        
+        console.log(`Final token list has ${allTokens.length} tokens`);
+        setTokens(allTokens);
+      } catch (err) {
+        console.error("Error fetching tokens:", err);
+        setError("Failed to load tokens");
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchTokens();
-  }, [chainId, publicClient]);
+  }, [publicClient]);
 
   return { tokens, loading, error };
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  Token dropdown component using Shadcn UI
+  SIMPLIFIED TOKEN SELECTOR: Using native <select> dropdown
 ──────────────────────────────────────────────────────────────────────────── */
 const TokenSelector = ({
-  token,
+  selectedToken,
   tokens,
   onSelect,
 }: {
-  token: TokenMeta;
+  selectedToken: TokenMeta;
   tokens: TokenMeta[];
-  onSelect: (t: TokenMeta) => void;
-}) => (
-  <Popover>
-    <PopoverTrigger asChild>
-      <Button variant="ghost" size="sm" className="gap-1 px-2 text-base">
-        {token.symbol}
-        <ChevronDown className="h-4 w-4 opacity-60" />
-      </Button>
-    </PopoverTrigger>
-    <PopoverContent side="bottom" align="start" className="p-0 w-48">
-      <ScrollArea className="h-64">
-        {tokens.length <= 1 ? (
-          <div className="p-2 text-sm text-center text-gray-500">No tokens available</div>
-        ) : (
-          tokens.map((t) => (
-            <button
-              key={t.id?.toString() ?? "eth"}
-              className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted"
-              onClick={() => onSelect(t)}
-            >
-              <span>{t.symbol}</span>
-              {t.symbol === token.symbol && <Check className="h-4 w-4" />}
-            </button>
-          ))
-        )}
-      </ScrollArea>
-    </PopoverContent>
-  </Popover>
-);
+  onSelect: (token: TokenMeta) => void;
+}) => {
+  // Selected value is the token's ID as a string (or "eth" for ETH)
+  const selectedValue = selectedToken.id?.toString() ?? "eth";
+  
+  // Handle selection change
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    // Find the token object that matches the selected value
+    const selected = tokens.find(t => 
+      (t.id === null && value === "eth") || 
+      (t.id !== null && t.id.toString() === value)
+    );
+    
+    if (selected) {
+      console.log("Selected token:", selected);
+      onSelect(selected);
+    }
+  };
+  
+  return (
+    <select 
+      value={selectedValue}
+      onChange={handleChange}
+      className="appearance-none bg-transparent border border-yellow-200 rounded-md px-2 py-1 pr-8 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+      style={{ 
+        backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23D97706'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E\")",
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "right 0.5rem center",
+        backgroundSize: "1rem"
+      }}
+    >
+      {tokens.map((token) => (
+        <option 
+          key={token.id?.toString() ?? "eth"} 
+          value={token.id?.toString() ?? "eth"}
+        >
+          {token.symbol}
+        </option>
+      ))}
+    </select>
+  );
+};
 
 /* ────────────────────────────────────────────────────────────────────────────
   SwapTile main component
 ──────────────────────────────────────────────────────────────────────────── */
 export const SwapTile = () => {
-  /* token list */
   const { tokens, loading, error: loadError } = useAllTokens();
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
   
-  // Add a debug state to show token count
+  // Debug info
   const tokenCount = tokens.length;
-
-  // Default buy token once list loads
+  
+  // Set initial buyToken once tokens are loaded
   useEffect(() => {
     if (!buyToken && tokens.length > 1) {
       console.log("Setting initial buyToken to:", tokens[1]);
@@ -345,14 +290,25 @@ export const SwapTile = () => {
     }
   }, [tokens, buyToken]);
 
+  // Handle token selection
+  const handleSellTokenSelect = (token: TokenMeta) => {
+    console.log("Sell token changed:", token);
+    setSellToken(token);
+  };
+  
+  const handleBuyTokenSelect = (token: TokenMeta) => {
+    console.log("Buy token changed:", token);
+    setBuyToken(token);
+  };
+
   const flipTokens = () => {
     if (!buyToken) return;
+    console.log("Flipping tokens:", { from: sellToken, to: buyToken });
     setSellToken(buyToken);
     setBuyToken(sellToken);
   };
 
   /* derived flags */
-  // Use the same logic as your earlier version - require one token to be ETH
   const canSwap = sellToken && buyToken && (sellToken.id === null || buyToken.id === null);
   const isSellETH = sellToken.id === null;
   const coinId = (isSellETH ? buyToken?.id : sellToken.id) ?? 0n;
@@ -365,39 +321,65 @@ export const SwapTile = () => {
 
   /* wagmi hooks */
   const { address, isConnected } = useAccount();
-  const { writeContractAsync, isPending, error } = useWriteContract();
+  const { writeContractAsync, isPending, error: writeError } = useWriteContract();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const { switchChain } = useSwitchChain();
   const chainId = useChainId();
-
-  /* on‑chain reserves */
-  const poolId = computePoolId(coinId);
-  const { data: rawReserves } = useReadContract({
-    address: ZAAMAddress,
-    abi: ZAAMAbi,
-    functionName: "pools",
-    args: [poolId],
-    chainId: mainnet.id,
-    query: {
-      enabled: Boolean(canSwap && coinId),
-    },
-  });
   
-  const reserves = rawReserves
-    ? { reserve0: rawReserves[0], reserve1: rawReserves[1] }
-    : undefined;
+  /* Calculate pool reserves */
+  const [reserves, setReserves] = useState<{ reserve0: bigint, reserve1: bigint } | null>(null);
 
-  /* allowance for token sales */
-  const { data: isOperator } = useReadContract({
-    address: CoinsAddress,
-    abi: CoinsAbi,
-    functionName: "isOperator",
-    args: address && !isSellETH ? [address, ZAAMAddress] : undefined,
-    chainId: mainnet.id,
-    query: {
-      enabled: Boolean(address && !isSellETH),
-    },
-  });
+  // Fetch reserves directly
+  useEffect(() => {
+    const fetchReserves = async () => {
+      if (!canSwap || !coinId || coinId === 0n || !publicClient) return;
+      
+      try {
+        const poolId = computePoolId(coinId);
+        const result = await publicClient.readContract({
+          address: ZAAMAddress,
+          abi: ZAAMAbi,
+          functionName: "pools",
+          args: [poolId],
+        }) as [bigint, bigint];
+        
+        setReserves({
+          reserve0: result[0],
+          reserve1: result[1]
+        });
+      } catch (err) {
+        console.error("Failed to fetch reserves:", err);
+        setReserves(null);
+      }
+    };
+    
+    fetchReserves();
+  }, [coinId, canSwap, publicClient]);
+
+  /* Check if user has approved ZAAM as operator */
+  const [isOperator, setIsOperator] = useState<boolean | null>(null);
+  
+  useEffect(() => {
+    const checkOperator = async () => {
+      if (!address || !publicClient || isSellETH) return;
+      
+      try {
+        const result = await publicClient.readContract({
+          address: CoinsAddress,
+          abi: CoinsAbi,
+          functionName: "isOperator",
+          args: [address, ZAAMAddress],
+        }) as boolean;
+        
+        setIsOperator(result);
+      } catch (err) {
+        console.error("Failed to check operator status:", err);
+        setIsOperator(null);
+      }
+    };
+    
+    checkOperator();
+  }, [address, isSellETH, publicClient]);
 
   /* helpers to sync amounts */
   const syncFromSell = (val: string) => {
@@ -460,7 +442,7 @@ export const SwapTile = () => {
   const nowSec = () => BigInt(Math.floor(Date.now() / 1000));
 
   const executeSwap = async () => {
-    if (!canSwap || !reserves || !address || !sellAmt) return;
+    if (!canSwap || !reserves || !address || !sellAmt || !publicClient) return;
     setTxError(null);
     
     try {
@@ -511,7 +493,7 @@ export const SwapTile = () => {
         const amountInUnits = parseUnits(sellAmt || "0", 18);
         
         // Approve ZAAM as operator if needed
-        if (!isOperator) {
+        if (isOperator === false) {
           try {
             await writeContractAsync({
               address: CoinsAddress,
@@ -520,6 +502,7 @@ export const SwapTile = () => {
               args: [ZAAMAddress, true],
               chainId: mainnet.id,
             });
+            setIsOperator(true);
           } catch (err) {
             console.error("Failed to approve operator:", err);
             setTxError("Failed to approve the swap contract as operator");
@@ -561,25 +544,25 @@ export const SwapTile = () => {
     }
   };
 
-  /* UI */
-  // Simple loading spinner like your earlier version
-  if (loading)
+  // Loading state
+  if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
+  }
 
-  // Streamlined UI similar to your earlier version
+  // Main UI
   return (
     <Card className="w-lg p-6 border-2 border-yellow-100 shadow-md rounded-xl">
       <CardContent className="p-1 flex flex-col space-y-1">
         {/* Debug info showing token count */}
         <div className="text-xs text-gray-500 mb-2">
-          Available tokens: {tokenCount}
+          Available tokens: {tokenCount} (ETH + {tokenCount - 1} coins)
         </div>
         
-        {/* Load error notification (minimal) */}
+        {/* Load error notification */}
         {loadError && (
           <div className="p-2 mb-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
             {loadError}
@@ -593,9 +576,9 @@ export const SwapTile = () => {
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Sell</span>
               <TokenSelector
-                token={sellToken}
+                selectedToken={sellToken}
                 tokens={tokens}
-                onSelect={setSellToken}
+                onSelect={handleSellTokenSelect}
               />
             </div>
             <input
@@ -623,9 +606,9 @@ export const SwapTile = () => {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Buy</span>
                 <TokenSelector
-                  token={buyToken}
+                  selectedToken={buyToken}
                   tokens={tokens}
-                  onSelect={setBuyToken}
+                  onSelect={handleBuyTokenSelect}
                 />
               </div>
               <input
@@ -641,14 +624,14 @@ export const SwapTile = () => {
           )}
         </div>
 
-        {/* Show simplified network indicator instead of blocking error */}
+        {/* Network indicator */}
         {isConnected && chainId !== mainnet.id && (
           <div className="text-xs mt-1 px-1 text-yellow-600">
             Please connect to Ethereum mainnet (will auto-switch when swapping)
           </div>
         )}
         
-        {/* Pool information - helpful addition */}
+        {/* Pool information */}
         {canSwap && reserves && (
           <div className="text-xs text-gray-500 flex justify-between px-1 mt-1">
             <span>Pool: {formatEther(reserves.reserve0).substring(0, 8)} ETH / {formatUnits(reserves.reserve1, 18).substring(0, 8)} {buyToken?.symbol}</span>
@@ -670,11 +653,12 @@ export const SwapTile = () => {
           ) : "Swap"}
         </Button>
 
-        {/* Compact error handling */}
-        {(error || txError) && (
-          <div className="text-sm text-red-600 mt-2">{error?.message || txError}</div>
+        {/* Error handling */}
+        {(writeError || txError) && (
+          <div className="text-sm text-red-600 mt-2">{writeError?.message || txError}</div>
         )}
         
+        {/* Success message */}
         {isSuccess && (
           <div className="text-sm text-green-600 mt-2">Transaction confirmed!</div>
         )}
