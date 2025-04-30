@@ -465,8 +465,14 @@ export const SwapTile = () => {
   };
 
   /* derived flags */
-  const canSwap = sellToken && buyToken && (sellToken.id === null || buyToken.id === null);
+  const canSwap = sellToken && buyToken && (
+    // Original cases: ETH → Coin or Coin → ETH
+    (sellToken.id === null || buyToken.id === null) ||
+    // New case: Coin → Coin (different IDs)
+    (sellToken.id !== null && buyToken?.id !== null && sellToken.id !== buyToken.id)
+  );
   const isSellETH = sellToken.id === null;
+  const isCoinToCoin = sellToken.id !== null && buyToken?.id !== null && buyToken?.id !== undefined && sellToken.id !== buyToken.id;
   const coinId = (isSellETH ? buyToken?.id : sellToken.id) ?? 0n;
 
   /* user inputs */
@@ -484,11 +490,12 @@ export const SwapTile = () => {
   
   /* Calculate pool reserves */
   const [reserves, setReserves] = useState<{ reserve0: bigint, reserve1: bigint } | null>(null);
+  const [targetReserves, setTargetReserves] = useState<{ reserve0: bigint, reserve1: bigint } | null>(null);
 
   // Fetch reserves directly
   useEffect(() => {
     const fetchReserves = async () => {
-      if (!canSwap || !coinId || coinId === 0n || !publicClient) return;
+      if (!coinId || coinId === 0n || !publicClient) return;
       
       try {
         const poolId = computePoolId(coinId);
@@ -515,7 +522,36 @@ export const SwapTile = () => {
     };
     
     fetchReserves();
-  }, [coinId, canSwap, publicClient]);
+  }, [coinId, publicClient]);
+  
+  // Fetch target reserves for coin-to-coin swaps
+  useEffect(() => {
+    const fetchTargetReserves = async () => {
+      if (!isCoinToCoin || !buyToken?.id || buyToken.id === 0n || !publicClient) return;
+      
+      try {
+        const targetPoolId = computePoolId(buyToken.id);
+        const result = await publicClient.readContract({
+          address: ZAAMAddress,
+          abi: ZAAMAbi,
+          functionName: "pools",
+          args: [targetPoolId],
+        });
+        
+        const poolData = result as unknown as readonly bigint[];
+        
+        setTargetReserves({
+          reserve0: poolData[0],
+          reserve1: poolData[1]
+        });
+      } catch (err) {
+        console.error("Failed to fetch target reserves:", err);
+        setTargetReserves(null);
+      }
+    };
+    
+    fetchTargetReserves();
+  }, [isCoinToCoin, buyToken?.id, publicClient]);
 
   /* Check if user has approved ZAAM as operator */
   const [isOperator, setIsOperator] = useState<boolean | null>(null);
@@ -543,11 +579,39 @@ export const SwapTile = () => {
   }, [address, isSellETH, publicClient]);
 
   /* helpers to sync amounts */
-  const syncFromSell = (val: string) => {
+  const syncFromSell = async (val: string) => {
     setSellAmt(val);
     if (!canSwap || !reserves) return setBuyAmt("");
+    
     try {
-      if (isSellETH) {
+      // Different calculation paths based on swap type
+      if (isCoinToCoin && targetReserves && buyToken?.id && sellToken.id) {
+        // For coin-to-coin swaps, we need to estimate a two-hop swap
+        try {
+          // Dynamically import helper to avoid circular dependencies
+          const { estimateCoinToCoinOutput } = await import('./lib/swapHelper');
+          
+          const inUnits = parseUnits(val || "0", 18);
+          const { amountOut, ethAmountOut } = estimateCoinToCoinOutput(
+            sellToken.id,
+            buyToken.id,
+            inUnits,
+            reserves,
+            targetReserves
+          );
+          
+          // For debugging purposes, log the estimated ETH intermediary amount
+          if (amountOut > 0n) {
+            console.log(`Estimated path: ${formatUnits(inUnits, 18)} ${sellToken.symbol} → ${formatEther(ethAmountOut)} ETH → ${formatUnits(amountOut, 18)} ${buyToken.symbol}`);
+          }
+          
+          setBuyAmt(amountOut === 0n ? "" : formatUnits(amountOut, 18));
+        } catch (err) {
+          console.error("Error estimating coin-to-coin output:", err);
+          setBuyAmt("");
+        }
+      } else if (isSellETH) {
+        // ETH → Coin path
         const inWei = parseEther(val || "0");
         const outUnits = getAmountOut(
           inWei,
@@ -557,6 +621,7 @@ export const SwapTile = () => {
         );
         setBuyAmt(outUnits === 0n ? "" : formatUnits(outUnits, 18));
       } else {
+        // Coin → ETH path
         const inUnits = parseUnits(val || "0", 18);
         const outWei = getAmountOut(
           inUnits,
@@ -571,11 +636,22 @@ export const SwapTile = () => {
     }
   };
 
-  const syncFromBuy = (val: string) => {
+  const syncFromBuy = async (val: string) => {
     setBuyAmt(val);
     if (!canSwap || !reserves) return setSellAmt("");
+    
     try {
-      if (isSellETH) {
+      // Different calculation paths based on swap type
+      if (isCoinToCoin) {
+        // Calculating input from output for coin-to-coin is very complex
+        // Would require a recursive solver to find the right input amount
+        // For UI simplicity, we'll just clear the input and let the user adjust
+        setSellAmt("");
+        
+        // Optional: Show a notification that this direction is not supported
+        console.log("Setting output directly not supported for coin-to-coin swaps");
+      } else if (isSellETH) {
+        // ETH → Coin path (calculate ETH input)
         const outUnits = parseUnits(val || "0", 18);
         const inWei = getAmountIn(
           outUnits,
@@ -585,6 +661,7 @@ export const SwapTile = () => {
         );
         setSellAmt(inWei === 0n ? "" : formatEther(inWei));
       } else {
+        // Coin → ETH path (calculate Coin input)
         const outWei = parseEther(val || "0");
         const inUnits = getAmountIn(
           outWei,
@@ -647,7 +724,7 @@ export const SwapTile = () => {
             nowSec() + BigInt(DEADLINE_SEC),
           ],
           value: amountInWei,
-          chainId: mainnet.id,
+          // Don't specify chainId here, let wagmi use the current connected chain
         });
         setTxHash(hash);
       } else {
@@ -661,7 +738,7 @@ export const SwapTile = () => {
               abi: CoinsAbi,
               functionName: "setOperator",
               args: [ZAAMAddress, true],
-              chainId: mainnet.id,
+              // Don't specify chainId here, let wagmi use the current connected chain
             });
             setIsOperator(true);
           } catch (err) {
@@ -671,6 +748,81 @@ export const SwapTile = () => {
           }
         }
         
+        // If we have two different Coin IDs, use the multicall path for Coin to Coin swap
+        if (buyToken?.id !== null && sellToken.id !== null && buyToken?.id !== sellToken.id) {
+          try {
+            // Import our helper dynamically to avoid circular dependencies
+            const { createCoinSwapMulticall, estimateCoinToCoinOutput } = await import('./lib/swapHelper');
+            
+            // Fetch target coin reserves
+            const targetPoolId = computePoolId(buyToken.id!);
+            const targetPoolResult = await publicClient.readContract({
+              address: ZAAMAddress,
+              abi: ZAAMAbi,
+              functionName: "pools",
+              args: [targetPoolId],
+            });
+            
+            const targetPoolData = targetPoolResult as unknown as readonly bigint[];
+            const targetReserves = {
+              reserve0: targetPoolData[0],
+              reserve1: targetPoolData[1]
+            };
+            
+            // Estimate the final output amount and intermediate ETH amount
+            const { amountOut, withSlippage: minAmountOut, ethAmountOut } = estimateCoinToCoinOutput(
+              sellToken.id!,
+              buyToken.id!,
+              amountInUnits,
+              reserves, // source reserves
+              targetReserves // target reserves
+            );
+            
+            if (amountOut === 0n) {
+              setTxError("Output amount is zero. Check pool liquidity.");
+              return;
+            }
+            
+            console.log(`Swapping ${amountInUnits} of coin ${sellToken.id} through ${ethAmountOut} ETH to minimum ${minAmountOut} of coin ${buyToken.id}`);
+            
+            // Create the multicall data for coin-to-coin swap via ETH
+            const multicallData = createCoinSwapMulticall(
+              sellToken.id!,
+              buyToken.id!,
+              amountInUnits,
+              ethAmountOut, // Pass the estimated ETH output for the second swap
+              minAmountOut,
+              address
+            );
+            
+            // Log the calls we're making for debugging
+            console.log("Executing multicall with the following operations:");
+            console.log(`1. Swap ${formatUnits(amountInUnits, 18)} ${sellToken.symbol} → ETH`);
+            console.log(`2. Swap ~${formatEther(ethAmountOut)} ETH → min ${formatUnits(minAmountOut, 18)} ${buyToken.symbol}`);
+            console.log(`3. Recover any leftover ${sellToken.symbol} to ${address} (unlikely)`);
+            console.log(`4. Recover any leftover ETH to ${address} (expected)`);
+            console.log(`5. Recover any excess ${buyToken.symbol} to ${address} (safety measure)`);
+            
+            // Execute the multicall transaction - don't specify chainId explicitly to use current chain
+            const hash = await writeContractAsync({
+              address: ZAAMAddress,
+              abi: ZAAMAbi,
+              functionName: "multicall",
+              args: [multicallData],
+              // Don't specify chainId here, let wagmi use the current connected chain
+            });
+            
+            console.log(`Transaction hash: ${hash}`);
+            setTxHash(hash);
+            return;
+          } catch (err) {
+            console.error("Error in multicall swap:", err);
+            setTxError(err instanceof Error ? err.message : "Failed to execute coin-to-coin swap");
+            return;
+          }
+        }
+        
+        // Default path for Coin to ETH swap
         const rawOut = getAmountOut(
           amountInUnits,
           reserves.reserve1,
@@ -695,7 +847,7 @@ export const SwapTile = () => {
             address,
             nowSec() + BigInt(DEADLINE_SEC),
           ],
-          chainId: mainnet.id,
+          // Don't specify chainId here, let wagmi use the current connected chain
         });
         setTxHash(hash);
       }
@@ -795,8 +947,15 @@ export const SwapTile = () => {
         {/* Pool information */}
         {canSwap && reserves && (
           <div className="text-xs text-gray-500 flex justify-between px-1 mt-1">
-            <span>Pool: {formatEther(reserves.reserve0).substring(0, 8)} ETH / {formatUnits(reserves.reserve1, 18).substring(0, 8)} {buyToken?.symbol}</span>
-            <span>Fee: {Number(SWAP_FEE) / 100}%</span>
+            {isCoinToCoin ? (
+              <span className="flex items-center">
+                <span className="bg-yellow-200 text-yellow-800 px-1 rounded mr-1">Multi-hop</span>
+                {sellToken.symbol} → ETH → {buyToken?.symbol}
+              </span>
+            ) : (
+              <span>Pool: {formatEther(reserves.reserve0).substring(0, 8)} ETH / {formatUnits(reserves.reserve1, 18).substring(0, 8)} {buyToken?.symbol}</span>
+            )}
+            <span>Fee: {isCoinToCoin ? Number(SWAP_FEE) * 2 / 100 : Number(SWAP_FEE) / 100}%</span>
           </div>
         )}
 
