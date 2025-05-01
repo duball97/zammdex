@@ -1,5 +1,6 @@
 import { BuySell } from "./BuySell";
 import { useCoinMeta } from "./hooks/use-coin-meta";
+import { ClaimVested } from "./ClaimVested";
 
 export const TradeView = ({
   tokenId,
@@ -26,6 +27,11 @@ export const TradeView = ({
 
       {/* buy / sell form from previous answer */}
       <BuySell tokenId={tokenId} name={name} symbol={symbol} />
+      
+      {/* Claim vested LP tokens section */}
+      <div className="mt-6">
+        <ClaimVested coinId={tokenId} />
+      </div>
     </div>
   );
 };
