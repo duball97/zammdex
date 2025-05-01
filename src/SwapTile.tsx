@@ -19,10 +19,12 @@ import {
 } from "viem";
 import { CoinsAbi, CoinsAddress } from "./constants/Coins";
 import { ZAAMAbi, ZAAMAddress } from "./constants/ZAAM";
+import { ZAMMHelperAbi, ZAMMHelperAddress } from "./constants/ZAMMHelper";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, ArrowDownUp } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, ArrowDownUp, Plus } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -518,12 +520,18 @@ const TokenSelector = ({
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
+  Mode types and constants
+──────────────────────────────────────────────────────────────────────────── */
+type TileMode = "swap" | "liquidity";
+
+/* ────────────────────────────────────────────────────────────────────────────
   SwapTile main component
 ──────────────────────────────────────────────────────────────────────────── */
 export const SwapTile = () => {
   const { tokens, loading, error: loadError } = useAllTokens();
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
+  const [mode, setMode] = useState<TileMode>("swap");
   
   // Get the public client for contract interactions
   const publicClient = usePublicClient({ chainId: mainnet.id });
@@ -772,6 +780,165 @@ export const SwapTile = () => {
   /* perform swap */
   const nowSec = () => BigInt(Math.floor(Date.now() / 1000));
 
+  const executeAddLiquidity = async () => {
+    // More specific input validation to catch issues early
+    if (!canSwap || !reserves || !address || !publicClient) {
+      setTxError("Missing required data for transaction");
+      return;
+    }
+    
+    if (!sellAmt || parseFloat(sellAmt) <= 0) {
+      setTxError("Please enter a valid sell amount");
+      return;
+    }
+    
+    if (!buyAmt || parseFloat(buyAmt) <= 0) {
+      setTxError("Please enter a valid buy amount");
+      return;
+    }
+    
+    setTxError(null);
+    
+    try {
+      // Switch to mainnet if needed
+      if (chainId !== mainnet.id) {
+        try {
+          await switchChain({ chainId: mainnet.id });
+        } catch (err) {
+          console.error("Failed to switch to Ethereum mainnet:", err);
+          setTxError("Failed to switch to Ethereum mainnet");
+          return;
+        }
+      }
+      
+      const poolKey = computePoolKey(coinId);
+      const deadline = nowSec() + BigInt(DEADLINE_SEC);
+      
+      // In ZAMM's design, for all pools:
+      // - token0 is always ETH (zeroAddress), id0 is 0
+      // - token1 is always the Coin contract, id1 is the coinId
+      
+      // So we need to ensure:
+      // - amount0 is the ETH amount (regardless of which input field the user used)
+      // - amount1 is the Coin amount
+      
+      const amount0 = isSellETH ? parseEther(sellAmt) : parseEther(buyAmt); // ETH amount
+      const amount1 = isSellETH ? parseUnits(buyAmt, 18) : parseUnits(sellAmt, 18); // Coin amount
+      
+      // Verify we have valid amounts
+      if (amount0 === 0n || amount1 === 0n) {
+        setTxError("Invalid liquidity amounts");
+        return;
+      }
+      
+      // Calculate minimum amounts with slippage protection
+      const amount0Min = withSlippage(amount0);
+      const amount1Min = withSlippage(amount1);
+      
+      // Check if the user needs to approve ZAMM as operator for their Coin token
+      // This is needed when the user is providing Coin tokens (not just ETH)
+      // Since we're always providing Coin tokens in liquidity, we need approval
+      if (isOperator === false) {
+        try {
+          console.log("Setting ZAMM as operator for Coin tokens");
+          await writeContractAsync({
+            address: CoinsAddress,
+            abi: CoinsAbi,
+            functionName: "setOperator",
+            args: [ZAAMAddress, true],
+          });
+          setIsOperator(true);
+        } catch (err) {
+          console.error("Failed to approve operator:", err);
+          setTxError("Failed to approve the liquidity contract as operator");
+          return;
+        }
+      }
+      
+      console.log(`Adding liquidity - ETH: ${formatEther(amount0)}, Coin: ${formatUnits(amount1, 18)}`);
+      console.log(`Min amounts - ETH: ${formatEther(amount0Min)}, Coin: ${formatUnits(amount1Min, 18)}`);
+      
+      // Use ZAMMHelper to calculate the exact ETH amount to provide
+      console.log("Calling ZAMMHelper.calculateRequiredETH to get the exact ETH amount...");
+      try {
+        // The contract call returns an array of values rather than an object
+        const result = await publicClient.readContract({
+          address: ZAMMHelperAddress,
+          abi: ZAMMHelperAbi,
+          functionName: "calculateRequiredETH",
+          args: [
+            poolKey,
+            amount0, // amount0Desired
+            amount1, // amount1Desired
+          ],
+        });
+        
+        console.log("Raw ZAMMHelper result:", result);
+        
+        // Extract the values from the result array
+        const [ethAmount, calcAmount0, calcAmount1] = result as [bigint, bigint, bigint];
+        
+        // Detailed logging to help with debugging
+        console.log(`==== LIQUIDITY CALCULATION (ZAMMHelper) ====`);
+        console.log(`Desired amounts: ${formatEther(amount0)} ETH / ${formatUnits(amount1, 18)} tokens`);
+        console.log(`ZAMMHelper calculated: ${formatEther(ethAmount)} ETH to provide`);
+        console.log(`ZAMMHelper amounts: ${formatEther(calcAmount0)} ETH / ${formatUnits(calcAmount1, 18)} tokens`);
+        console.log(`==============================`);
+        
+        // Calculate minimum amounts based on the actual amounts that will be used by the contract
+        const actualAmount0Min = withSlippage(calcAmount0);
+        const actualAmount1Min = withSlippage(calcAmount1);
+        
+        console.log(`Min amounts adjusted: ${formatEther(actualAmount0Min)} ETH / ${formatUnits(actualAmount1Min, 18)} tokens`);
+        
+        // Use the ethAmount from ZAMMHelper as the exact value to send
+        // IMPORTANT: We should also use the exact calculated amounts for amount0Desired and amount1Desired
+        const hash = await writeContractAsync({
+          address: ZAAMAddress,
+          abi: ZAAMAbi,
+          functionName: "addLiquidity",
+          args: [
+            poolKey,
+            calcAmount0, // use calculated amount0 as amount0Desired
+            calcAmount1, // use calculated amount1 as amount1Desired
+            actualAmount0Min, // use adjusted min based on calculated amount
+            actualAmount1Min, // use adjusted min based on calculated amount
+            address, // to
+            deadline,
+          ],
+          value: ethAmount, // Use the exact ETH amount calculated by ZAMMHelper
+        });
+        
+        setTxHash(hash);
+      } catch (calcErr) {
+        console.error("Error calling ZAMMHelper.calculateRequiredETH:", calcErr);
+        setTxError("Failed to calculate exact ETH amount");
+        return;
+      }
+    } catch (err) {
+      console.error("Add liquidity execution error:", err);
+      
+      // More specific error messages based on error type
+      if (err instanceof Error) {
+        console.log("Error details:", err);
+        
+        if (err.message.includes("insufficient funds")) {
+          setTxError("Insufficient funds for this transaction");
+        } else if (err.message.includes("user rejected")) {
+          setTxError("Transaction rejected by user");
+        } else if (err.message.includes("InvalidMsgVal")) {
+          // This is our critical error where the msg.value doesn't match what the contract expects
+          setTxError("Contract rejected ETH value. Please try again with different amounts.");
+          console.error("ZAMM contract rejected the ETH value due to strict msg.value validation.");
+        } else {
+          setTxError(err.message);
+        }
+      } else {
+        setTxError("Unknown error during liquidity provision");
+      }
+    }
+  };
+
   const executeSwap = async () => {
     if (!canSwap || !reserves || !address || !sellAmt || !publicClient) return;
     setTxError(null);
@@ -968,6 +1135,26 @@ export const SwapTile = () => {
           Available tokens: {tokenCount} (ETH + {tokenCount - 1} coins, sorted by liquidity)
         </div>
         
+        {/* Mode tabs */}
+        <Tabs value={mode} onValueChange={(value) => setMode(value as TileMode)} className="mb-2">
+          <TabsList className="w-full bg-yellow-50 p-1 rounded-lg border border-yellow-100">
+            <TabsTrigger 
+              value="swap" 
+              className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+            >
+              <ArrowDownUp className="h-4 w-4 mr-1" />
+              Swap
+            </TabsTrigger>
+            <TabsTrigger 
+              value="liquidity" 
+              className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Liquidity
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        
         {/* Load error notification */}
         {loadError && (
           <div className="p-2 mb-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
@@ -977,10 +1164,12 @@ export const SwapTile = () => {
         
         {/* SELL + FLIP + BUY panel container */}
         <div className="relative flex flex-col">
-          {/* SELL panel */}
+          {/* SELL/PROVIDE panel */}
           <div className="border-2 border-yellow-300 group hover:bg-yellow-50 rounded-t-2xl p-2 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Sell</span>
+              <span className="text-sm text-muted-foreground">
+                {mode === "swap" ? "Sell" : "Provide"}
+              </span>
               <TokenSelector
                 selectedToken={sellToken}
                 tokens={tokens}
@@ -998,19 +1187,25 @@ export const SwapTile = () => {
             />
           </div>
           
-          {/* FLIP button */}
+          {/* FLIP/PLUS button */}
           <button
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 active:scale-95 transition-all z-10"
             onClick={flipTokens}
           >
-            <ArrowDownUp className="h-4 w-4 text-white" />
+            {mode === "swap" ? (
+              <ArrowDownUp className="h-4 w-4 text-white" />
+            ) : (
+              <Plus className="h-4 w-4 text-white" />
+            )}
           </button>
 
-          {/* BUY panel */}
+          {/* BUY/RECEIVE panel */}
           {buyToken && (
             <div className="border-2 border-yellow-300 group rounded-b-2xl p-2 pt-3 focus-within:ring-2 hover:bg-yellow-50 focus-within:ring-primary flex flex-col gap-2 mt-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Buy</span>
+                <span className="text-sm text-muted-foreground">
+                  {mode === "swap" ? "Buy" : "And"}
+                </span>
                 <TokenSelector
                   selectedToken={buyToken}
                   tokens={tokens}
@@ -1033,14 +1228,26 @@ export const SwapTile = () => {
         {/* Network indicator */}
         {isConnected && chainId !== mainnet.id && (
           <div className="text-xs mt-1 px-1 text-yellow-600">
-            Please connect to Ethereum mainnet (will auto-switch when swapping)
+            Please connect to Ethereum mainnet (will auto-switch when {mode === "swap" ? "swapping" : "adding liquidity"})
+          </div>
+        )}
+        
+        {/* Mode-specific information */}
+        {mode === "liquidity" && (
+          <div className="text-xs bg-yellow-50 border border-yellow-200 rounded p-2 mt-2 text-yellow-800">
+            <p className="font-medium mb-1">Adding liquidity provides:</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li>LP tokens as a proof of your position</li>
+              <li>Earn {Number(SWAP_FEE) / 100}% fees from trades</li>
+              <li>Withdraw your liquidity anytime</li>
+            </ul>
           </div>
         )}
         
         {/* Pool information */}
         {canSwap && reserves && (
           <div className="text-xs text-gray-500 flex justify-between px-1 mt-1">
-            {isCoinToCoin ? (
+            {mode === "swap" && isCoinToCoin ? (
               <span className="flex items-center">
                 <span className="bg-yellow-200 text-yellow-800 px-1 rounded mr-1">Multi-hop</span>
                 {sellToken.symbol} → ETH → {buyToken?.symbol}
@@ -1048,22 +1255,22 @@ export const SwapTile = () => {
             ) : (
               <span>Pool: {formatEther(reserves.reserve0).substring(0, 8)} ETH / {formatUnits(reserves.reserve1, 18).substring(0, 8)} {buyToken?.symbol}</span>
             )}
-            <span>Fee: {isCoinToCoin ? Number(SWAP_FEE) * 2 / 100 : Number(SWAP_FEE) / 100}%</span>
+            <span>Fee: {mode === "swap" && isCoinToCoin ? Number(SWAP_FEE) * 2 / 100 : Number(SWAP_FEE) / 100}%</span>
           </div>
         )}
 
         {/* ACTION BUTTON */}
         <Button
-          onClick={executeSwap}
+          onClick={mode === "swap" ? executeSwap : executeAddLiquidity}
           disabled={!isConnected || !canSwap || isPending || !sellAmt}
           className="w-full text-lg mt-4"
         >
           {isPending ? (
             <span className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Swapping…
+              {mode === "swap" ? "Swapping…" : "Adding Liquidity…"}
             </span>
-          ) : "Swap"}
+          ) : mode === "swap" ? "Swap" : "Add Liquidity"}
         </Button>
 
         {/* Error handling */}
