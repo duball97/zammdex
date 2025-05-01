@@ -24,7 +24,7 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowDownUp, Plus } from "lucide-react";
+import { Loader2, ArrowDownUp, Plus, Minus } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -523,6 +523,7 @@ const TokenSelector = ({
   Mode types and constants
 ──────────────────────────────────────────────────────────────────────────── */
 type TileMode = "swap" | "liquidity";
+type LiquidityMode = "add" | "remove";
 
 /* ────────────────────────────────────────────────────────────────────────────
   SwapTile main component
@@ -532,6 +533,9 @@ export const SwapTile = () => {
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
   const [mode, setMode] = useState<TileMode>("swap");
+  const [liquidityMode, setLiquidityMode] = useState<LiquidityMode>("add");
+  const [lpTokenBalance, setLpTokenBalance] = useState<bigint>(0n);
+  const [lpBurnAmount, setLpBurnAmount] = useState<string>("");
   
   // Get the public client for contract interactions
   const publicClient = usePublicClient({ chainId: mainnet.id });
@@ -653,6 +657,34 @@ export const SwapTile = () => {
     
     fetchTargetReserves();
   }, [isCoinToCoin, buyToken?.id, publicClient]);
+  
+  // Fetch LP token balance when a pool is selected and user is connected
+  useEffect(() => {
+    const fetchLpBalance = async () => {
+      if (!address || !publicClient || !coinId || coinId === 0n) return;
+      
+      try {
+        // Calculate the pool ID for the selected pair
+        const poolId = computePoolId(coinId);
+        
+        // Read the user's LP token balance for this pool
+        const balance = await publicClient.readContract({
+          address: ZAAMAddress,
+          abi: ZAAMAbi,
+          functionName: "balanceOf",
+          args: [address, poolId],
+        }) as bigint;
+        
+        console.log(`LP token balance for pool ${poolId}: ${balance}`);
+        setLpTokenBalance(balance);
+      } catch (err) {
+        console.error("Failed to fetch LP token balance:", err);
+        setLpTokenBalance(0n);
+      }
+    };
+    
+    fetchLpBalance();
+  }, [address, publicClient, coinId]);
 
   /* Check if user has approved ZAAM as operator */
   const [isOperator, setIsOperator] = useState<boolean | null>(null);
@@ -681,6 +713,71 @@ export const SwapTile = () => {
 
   /* helpers to sync amounts */
   const syncFromSell = async (val: string) => {
+    // In Remove Liquidity mode, track the LP burn amount separately
+    if (mode === "liquidity" && liquidityMode === "remove") {
+      setLpBurnAmount(val);
+      
+      // Calculate the expected token amounts based on the LP amount to burn
+      if (!reserves || !val) {
+        setSellAmt("");
+        setBuyAmt("");
+        return;
+      }
+      
+      try {
+        // Read the pool's total supply
+        const poolId = computePoolId(coinId);
+        const poolInfo = await publicClient.readContract({
+          address: ZAAMAddress,
+          abi: ZAAMAbi,
+          functionName: "pools",
+          args: [poolId],
+        }) as any;
+        
+        // Ensure we have pool data
+        if (!poolInfo) return;
+        
+        // Extract supply from pool data (the 7th item in the array for this contract, index 6)
+        console.log("Pool info:", poolInfo);
+        const totalSupply = poolInfo[6] as bigint; // Pool struct has supply at index 6
+        
+        if (totalSupply === 0n) return;
+        
+        // Calculate proportional amount of tokens based on removeLiquidity calculation in ZAMM.sol
+        const burnAmount = parseUnits(val || "0", 18);
+        
+        // Calculate amounts: amount0 = liquidity * reserve0 / totalSupply (from ZAMM.sol)
+        // This is the mulDiv function in ZAMM.sol converted to TypeScript
+        const ethAmount = (burnAmount * reserves.reserve0) / totalSupply;
+        const tokenAmount = (burnAmount * reserves.reserve1) / totalSupply;
+        
+        // Log calculation details for debugging
+        console.log("Remove Liquidity Preview Calculation:");
+        console.log(`Burn amount: ${formatUnits(burnAmount, 18)} LP tokens`);
+        console.log(`Total supply: ${formatUnits(totalSupply, 18)} LP tokens`);
+        console.log(`Pool reserves: ${formatEther(reserves.reserve0)} ETH, ${formatUnits(reserves.reserve1, 18)} tokens`);
+        console.log(`Expected return: ${formatEther(ethAmount)} ETH, ${formatUnits(tokenAmount, 18)} tokens`);
+        
+        // Sanity checks
+        if (ethAmount > reserves.reserve0 || tokenAmount > reserves.reserve1) {
+          console.error("Error: Calculated redemption exceeds pool reserves!");
+          setSellAmt("");
+          setBuyAmt("");
+          return;
+        }
+        
+        // Update the input fields with the calculated values
+        setSellAmt(ethAmount === 0n ? "" : formatEther(ethAmount));
+        setBuyAmt(tokenAmount === 0n ? "" : formatUnits(tokenAmount, 18));
+      } catch (err) {
+        console.error("Error calculating remove liquidity amounts:", err);
+        setSellAmt("");
+        setBuyAmt("");
+      }
+      return;
+    }
+    
+    // Regular Add Liquidity or Swap mode
     setSellAmt(val);
     if (!canSwap || !reserves) return setBuyAmt("");
     
@@ -779,6 +876,82 @@ export const SwapTile = () => {
 
   /* perform swap */
   const nowSec = () => BigInt(Math.floor(Date.now() / 1000));
+  
+  const executeRemoveLiquidity = async () => {
+    // Validate inputs
+    if (!reserves || !address || !publicClient) {
+      setTxError("Missing required data for transaction");
+      return;
+    }
+    
+    if (!lpBurnAmount || parseFloat(lpBurnAmount) <= 0) {
+      setTxError("Please enter a valid amount of LP tokens to burn");
+      return;
+    }
+    
+    // Check if burn amount exceeds user's balance
+    const burnAmount = parseUnits(lpBurnAmount, 18);
+    if (burnAmount > lpTokenBalance) {
+      setTxError(`You only have ${formatUnits(lpTokenBalance, 18)} LP tokens available`);
+      return;
+    }
+    
+    setTxError(null);
+    
+    try {
+      // Switch to mainnet if needed
+      if (chainId !== mainnet.id) {
+        try {
+          await switchChain({ chainId: mainnet.id });
+        } catch (err) {
+          console.error("Failed to switch to Ethereum mainnet:", err);
+          setTxError("Failed to switch to Ethereum mainnet");
+          return;
+        }
+      }
+      
+      const poolKey = computePoolKey(coinId);
+      const deadline = nowSec() + BigInt(DEADLINE_SEC);
+      
+      // Parse the minimum amounts from the displayed expected return
+      const amount0Min = sellAmt ? withSlippage(parseEther(sellAmt)) : 0n;
+      const amount1Min = buyAmt ? withSlippage(parseUnits(buyAmt, 18)) : 0n;
+      
+      console.log(`Removing liquidity - Burning ${formatUnits(burnAmount, 18)} LP tokens`);
+      console.log(`Min amounts - ETH: ${formatEther(amount0Min)}, Coin: ${formatUnits(amount1Min, 18)}`);
+      
+      // Call removeLiquidity on the ZAMM contract
+      const hash = await writeContractAsync({
+        address: ZAAMAddress,
+        abi: ZAAMAbi,
+        functionName: "removeLiquidity",
+        args: [
+          poolKey,
+          burnAmount,
+          amount0Min,
+          amount1Min,
+          address,
+          deadline,
+        ],
+      });
+      
+      setTxHash(hash);
+    } catch (err) {
+      console.error("Remove liquidity execution error:", err);
+      
+      if (err instanceof Error) {
+        console.log("Error details:", err);
+        
+        if (err.message.includes("user rejected")) {
+          setTxError("Transaction rejected by user");
+        } else {
+          setTxError(err.message);
+        }
+      } else {
+        setTxError("Unknown error during liquidity removal");
+      }
+    }
+  };
 
   const executeAddLiquidity = async () => {
     // More specific input validation to catch issues early
@@ -1164,11 +1337,43 @@ export const SwapTile = () => {
         
         {/* SELL + FLIP + BUY panel container */}
         <div className="relative flex flex-col">
+          {/* LP Amount Input (only visible in Remove Liquidity mode) */}
+          {mode === "liquidity" && liquidityMode === "remove" && (
+            <div className="border-2 border-yellow-500 group hover:bg-yellow-50 rounded-t-2xl p-3 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2 bg-yellow-50">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-yellow-800">LP Tokens to Burn</span>
+                <span className="text-xs text-yellow-700">
+                  Balance: {formatUnits(lpTokenBalance, 18)}
+                  <button
+                    className="ml-2 text-yellow-600 hover:text-yellow-800 font-medium"
+                    onClick={() => syncFromSell(formatUnits(lpTokenBalance, 18))}
+                  >
+                    MAX
+                  </button>
+                </span>
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="0.0"
+                value={lpBurnAmount}
+                onChange={(e) => syncFromSell(e.target.value)}
+                className="text-xl font-medium w-full bg-yellow-50 focus:outline-none"
+              />
+              <div className="text-xs text-yellow-600 mt-1">
+                Enter the amount of LP tokens you want to burn to receive ETH and tokens back.
+              </div>
+            </div>
+          )}
+          
           {/* SELL/PROVIDE panel */}
-          <div className="border-2 border-yellow-300 group hover:bg-yellow-50 rounded-t-2xl p-2 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2">
+          <div className={`border-2 border-yellow-300 group hover:bg-yellow-50 ${mode === "liquidity" && liquidityMode === "remove" ? "rounded-md" : "rounded-t-2xl"} p-2 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2 ${mode === "liquidity" && liquidityMode === "remove" ? "mt-2" : ""}`}>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
-                {mode === "swap" ? "Sell" : "Provide"}
+                {mode === "swap" ? "Sell" : 
+                  liquidityMode === "add" ? "Provide" : 
+                  "You'll Receive (ETH)"}
               </span>
               <TokenSelector
                 selectedToken={sellToken}
@@ -1176,26 +1381,34 @@ export const SwapTile = () => {
                 onSelect={handleSellTokenSelect}
               />
             </div>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              placeholder="0.0"
-              value={sellAmt}
-              onChange={(e) => syncFromSell(e.target.value)}
-              className="text-xl font-medium w-full focus:outline-none"
-            />
+            <div className="flex justify-between items-center">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="0.0"
+                value={sellAmt}
+                onChange={(e) => syncFromSell(e.target.value)}
+                className="text-xl font-medium w-full focus:outline-none"
+                readOnly={mode === "liquidity" && liquidityMode === "remove"}
+              />
+              {mode === "liquidity" && liquidityMode === "remove" && (
+                <span className="text-xs text-yellow-600 font-medium">Preview</span>
+              )}
+            </div>
           </div>
           
-          {/* FLIP/PLUS button */}
+          {/* FLIP/PLUS/MINUS button */}
           <button
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 active:scale-95 transition-all z-10"
-            onClick={flipTokens}
+            onClick={mode === "swap" ? flipTokens : () => setLiquidityMode(liquidityMode === "add" ? "remove" : "add")}
           >
             {mode === "swap" ? (
               <ArrowDownUp className="h-4 w-4 text-white" />
-            ) : (
+            ) : liquidityMode === "add" ? (
               <Plus className="h-4 w-4 text-white" />
+            ) : (
+              <Minus className="h-4 w-4 text-white" />
             )}
           </button>
 
@@ -1204,7 +1417,9 @@ export const SwapTile = () => {
             <div className="border-2 border-yellow-300 group rounded-b-2xl p-2 pt-3 focus-within:ring-2 hover:bg-yellow-50 focus-within:ring-primary flex flex-col gap-2 mt-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
-                  {mode === "swap" ? "Buy" : "And"}
+                  {mode === "swap" ? "Buy" : 
+                    liquidityMode === "add" ? "And" : 
+                    `You'll Receive (${buyToken.symbol})`}
                 </span>
                 <TokenSelector
                   selectedToken={buyToken}
@@ -1212,15 +1427,21 @@ export const SwapTile = () => {
                   onSelect={handleBuyTokenSelect}
                 />
               </div>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                placeholder="0.0"
-                value={buyAmt}
-                onChange={(e) => syncFromBuy(e.target.value)}
-                className="text-xl font-medium w-full focus:outline-none"
-              />
+              <div className="flex justify-between items-center">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="0.0"
+                  value={buyAmt}
+                  onChange={(e) => syncFromBuy(e.target.value)}
+                  className="text-xl font-medium w-full focus:outline-none"
+                  readOnly={mode === "liquidity" && liquidityMode === "remove"}
+                />
+                {mode === "liquidity" && liquidityMode === "remove" && (
+                  <span className="text-xs text-yellow-600 font-medium">Preview</span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1235,12 +1456,25 @@ export const SwapTile = () => {
         {/* Mode-specific information */}
         {mode === "liquidity" && (
           <div className="text-xs bg-yellow-50 border border-yellow-200 rounded p-2 mt-2 text-yellow-800">
-            <p className="font-medium mb-1">Adding liquidity provides:</p>
-            <ul className="list-disc pl-4 space-y-0.5">
-              <li>LP tokens as a proof of your position</li>
-              <li>Earn {Number(SWAP_FEE) / 100}% fees from trades</li>
-              <li>Withdraw your liquidity anytime</li>
-            </ul>
+            {liquidityMode === "add" ? (
+              <>
+                <p className="font-medium mb-1">Adding liquidity provides:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>LP tokens as a proof of your position</li>
+                  <li>Earn {Number(SWAP_FEE) / 100}% fees from trades</li>
+                  <li>Withdraw your liquidity anytime</li>
+                </ul>
+              </>
+            ) : (
+              <>
+                <p className="font-medium mb-1">Remove Liquidity:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Your LP balance: {formatUnits(lpTokenBalance, 18)} LP tokens</li>
+                  <li>Enter amount of LP tokens to burn</li>
+                  <li>Preview shows expected return of ETH and tokens</li>
+                </ul>
+              </>
+            )}
           </div>
         )}
         
@@ -1261,16 +1495,38 @@ export const SwapTile = () => {
 
         {/* ACTION BUTTON */}
         <Button
-          onClick={mode === "swap" ? executeSwap : executeAddLiquidity}
-          disabled={!isConnected || !canSwap || isPending || !sellAmt}
+          onClick={
+            mode === "swap" 
+              ? executeSwap 
+              : liquidityMode === "add" 
+                ? executeAddLiquidity 
+                : executeRemoveLiquidity
+          }
+          disabled={
+            !isConnected || 
+            (mode === "swap" && (!canSwap || !sellAmt)) ||
+            (mode === "liquidity" && liquidityMode === "add" && (!canSwap || !sellAmt)) ||
+            (mode === "liquidity" && liquidityMode === "remove" && (!lpBurnAmount || parseFloat(lpBurnAmount) <= 0 || parseUnits(lpBurnAmount || "0", 18) > lpTokenBalance)) ||
+            isPending
+          }
           className="w-full text-lg mt-4"
         >
           {isPending ? (
             <span className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {mode === "swap" ? "Swapping…" : "Adding Liquidity…"}
+              {mode === "swap" 
+                ? "Swapping…" 
+                : liquidityMode === "add" 
+                  ? "Adding Liquidity…" 
+                  : "Removing Liquidity…"
+              }
             </span>
-          ) : mode === "swap" ? "Swap" : "Add Liquidity"}
+          ) : mode === "swap" 
+            ? "Swap" 
+            : liquidityMode === "add" 
+              ? "Add Liquidity" 
+              : "Remove Liquidity"
+          }
         </Button>
 
         {/* Error handling */}
