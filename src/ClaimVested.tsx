@@ -8,8 +8,7 @@ import {
   useChainId,
 } from "wagmi";
 import {
-  formatUnits,
-  parseUnits,
+  formatUnits
 } from "viem";
 import { mainnet } from "viem/chains";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
