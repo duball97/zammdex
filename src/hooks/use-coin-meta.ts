@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useReadContracts } from "wagmi";
 import { CoinsAddress, CoinsAbi } from "@/constants/Coins";
+import { mainnet } from "viem/chains";
 
 type MetaState = {
   name: string;
@@ -24,21 +25,21 @@ export const useCoinMeta = (tokenId: bigint): MetaState => {
         abi: CoinsAbi,
         functionName: "name",
         args: [tokenId],
-        chainId: 1,
+        chainId: mainnet.id,
       },
       {
         address: CoinsAddress,
         abi: CoinsAbi,
         functionName: "symbol",
         args: [tokenId],
-        chainId: 1,
+        chainId: mainnet.id,
       },
       {
         address: CoinsAddress,
         abi: CoinsAbi,
         functionName: "tokenURI",
         args: [tokenId],
-        chainId: 1,
+        chainId: mainnet.id,
       },
     ],
     // optional — keep the response fresh for 30 s, then refetch

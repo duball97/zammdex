@@ -15,6 +15,7 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { isUserRejectionError } from "./utils";
 
 interface ClaimVestedProps {
   coinId: bigint;
@@ -156,8 +157,11 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
         try {
           await switchChain({ chainId: mainnet.id });
         } catch (err) {
-          console.error("Failed to switch to Ethereum mainnet:", err);
-          setTxError("Failed to switch to Ethereum mainnet");
+          // Only set error if it's not a user rejection
+          if (!isUserRejectionError(err)) {
+            console.error("Failed to switch to Ethereum mainnet:", err);
+            setTxError("Failed to switch to Ethereum mainnet");
+          }
           return;
         }
       }
@@ -168,12 +172,18 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
         abi: CoinchanAbi,
         functionName: "claimVested",
         args: [coinId],
+        chainId: mainnet.id,
       });
       
       setTxHash(hash);
     } catch (err) {
-      console.error("Error claiming vested tokens:", err);
+      // Check for user rejection first
+      if (isUserRejectionError(err)) {
+        // Silent handling - don't show error for user rejections
+        return;
+      }
       
+      // For contract errors, we still want to show specific messages
       if (err instanceof Error) {
         if (err.message.includes("Pending")) {
           setTxError("Tokens are not vestable yet");
@@ -181,13 +191,13 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
           setTxError("No tokens available to vest");
         } else if (err.message.includes("Unauthorized")) {
           setTxError("Only the creator can claim vested tokens");
-        } else if (err.message.includes("user rejected")) {
-          setTxError("Transaction rejected by user");
         } else {
-          setTxError(err.message);
+          console.error("Error claiming vested tokens:", err);
+          setTxError("Transaction failed. Please try again.");
         }
       } else {
-        setTxError("Unknown error during claim");
+        console.error("Unknown error during claim:", err);
+        setTxError("Transaction failed. Please try again.");
       }
     }
   };

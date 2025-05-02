@@ -1,4 +1,5 @@
-import { mainnet } from "viem/chains";import { useState, useEffect } from "react";
+import { mainnet } from "viem/chains";
+import { useState, useEffect } from "react";
 import {
   useWriteContract,
   useWaitForTransactionReceipt,
@@ -7,6 +8,7 @@ import {
   useSwitchChain,
   useChainId,
 } from "wagmi";
+import { handleWalletError, isUserRejectionError } from "./utils";
 import {
   parseEther,
   parseUnits,
@@ -904,8 +906,11 @@ export const SwapTile = () => {
         try {
           await switchChain({ chainId: mainnet.id });
         } catch (err) {
-          console.error("Failed to switch to Ethereum mainnet:", err);
-          setTxError("Failed to switch to Ethereum mainnet");
+          // Only set error if it's not a user rejection
+          if (!isUserRejectionError(err)) {
+            console.error("Failed to switch to Ethereum mainnet:", err);
+            setTxError("Failed to switch to Ethereum mainnet");
+          }
           return;
         }
       }
@@ -933,22 +938,15 @@ export const SwapTile = () => {
           address,
           deadline,
         ],
+        chainId: mainnet.id,
       });
       
       setTxHash(hash);
     } catch (err) {
-      console.error("Remove liquidity execution error:", err);
-      
-      if (err instanceof Error) {
-        console.log("Error details:", err);
-        
-        if (err.message.includes("user rejected")) {
-          setTxError("Transaction rejected by user");
-        } else {
-          setTxError(err.message);
-        }
-      } else {
-        setTxError("Unknown error during liquidity removal");
+      // Use our utility to handle errors, only show non-rejection errors
+      const errorMsg = handleWalletError(err);
+      if (errorMsg) {
+        setTxError(errorMsg);
       }
     }
   };
@@ -978,8 +976,11 @@ export const SwapTile = () => {
         try {
           await switchChain({ chainId: mainnet.id });
         } catch (err) {
-          console.error("Failed to switch to Ethereum mainnet:", err);
-          setTxError("Failed to switch to Ethereum mainnet");
+          // Only set error if it's not a user rejection
+          if (!isUserRejectionError(err)) {
+            console.error("Failed to switch to Ethereum mainnet:", err);
+            setTxError("Failed to switch to Ethereum mainnet");
+          }
           return;
         }
       }
@@ -1019,9 +1020,14 @@ export const SwapTile = () => {
             abi: CoinsAbi,
             functionName: "setOperator",
             args: [ZAAMAddress, true],
+            chainId: mainnet.id,
           });
           setIsOperator(true);
         } catch (err) {
+          // Handle user rejection silently
+          if (isUserRejectionError(err)) {
+            return;
+          }
           console.error("Failed to approve operator:", err);
           setTxError("Failed to approve the liquidity contract as operator");
           return;
@@ -1080,15 +1086,25 @@ export const SwapTile = () => {
             deadline,
           ],
           value: ethAmount, // Use the exact ETH amount calculated by ZAMMHelper
+          chainId: mainnet.id,
         });
         
         setTxHash(hash);
       } catch (calcErr) {
+        // Check if this is a user rejection
+        if (isUserRejectionError(calcErr)) {
+          return;
+        }
         console.error("Error calling ZAMMHelper.calculateRequiredETH:", calcErr);
         setTxError("Failed to calculate exact ETH amount");
         return;
       }
     } catch (err) {
+      // Handle specific error types but ignore user rejections
+      if (isUserRejectionError(err)) {
+        return;
+      }
+      
       console.error("Add liquidity execution error:", err);
       
       // More specific error messages based on error type
@@ -1097,14 +1113,12 @@ export const SwapTile = () => {
         
         if (err.message.includes("insufficient funds")) {
           setTxError("Insufficient funds for this transaction");
-        } else if (err.message.includes("user rejected")) {
-          setTxError("Transaction rejected by user");
         } else if (err.message.includes("InvalidMsgVal")) {
           // This is our critical error where the msg.value doesn't match what the contract expects
           setTxError("Contract rejected ETH value. Please try again with different amounts.");
           console.error("ZAMM contract rejected the ETH value due to strict msg.value validation.");
         } else {
-          setTxError(err.message);
+          setTxError("Transaction failed. Please try again.");
         }
       } else {
         setTxError("Unknown error during liquidity provision");
@@ -1122,8 +1136,11 @@ export const SwapTile = () => {
         try {
           await switchChain({ chainId: mainnet.id });
         } catch (err) {
-          console.error("Failed to switch to Ethereum mainnet:", err);
-          setTxError("Failed to switch to Ethereum mainnet");
+          // Only set error if it's not a user rejection
+          if (!isUserRejectionError(err)) {
+            console.error("Failed to switch to Ethereum mainnet:", err);
+            setTxError("Failed to switch to Ethereum mainnet");
+          }
           return;
         }
       }
@@ -1157,7 +1174,7 @@ export const SwapTile = () => {
             nowSec() + BigInt(DEADLINE_SEC),
           ],
           value: amountInWei,
-          // Don't specify chainId here, let wagmi use the current connected chain
+          chainId: mainnet.id,
         });
         setTxHash(hash);
       } else {
@@ -1171,10 +1188,14 @@ export const SwapTile = () => {
               abi: CoinsAbi,
               functionName: "setOperator",
               args: [ZAAMAddress, true],
-              // Don't specify chainId here, let wagmi use the current connected chain
+              chainId: mainnet.id,
             });
             setIsOperator(true);
           } catch (err) {
+            // Handle user rejection silently
+            if (isUserRejectionError(err)) {
+              return;
+            }
             console.error("Failed to approve operator:", err);
             setTxError("Failed to approve the swap contract as operator");
             return;
@@ -1236,21 +1257,25 @@ export const SwapTile = () => {
             console.log(`4. Recover any leftover ETH to ${address} (expected)`);
             console.log(`5. Recover any excess ${buyToken.symbol} to ${address} (safety measure)`);
             
-            // Execute the multicall transaction - don't specify chainId explicitly to use current chain
+            // Execute the multicall transaction
             const hash = await writeContractAsync({
               address: ZAAMAddress,
               abi: ZAAMAbi,
               functionName: "multicall",
               args: [multicallData],
-              // Don't specify chainId here, let wagmi use the current connected chain
+              chainId: mainnet.id,
             });
             
             console.log(`Transaction hash: ${hash}`);
             setTxHash(hash);
             return;
           } catch (err) {
+            // Handle user rejection silently
+            if (isUserRejectionError(err)) {
+              return;
+            }
             console.error("Error in multicall swap:", err);
-            setTxError(err instanceof Error ? err.message : "Failed to execute coin-to-coin swap");
+            setTxError("Failed to execute coin-to-coin swap");
             return;
           }
         }
@@ -1280,13 +1305,17 @@ export const SwapTile = () => {
             address,
             nowSec() + BigInt(DEADLINE_SEC),
           ],
-          // Don't specify chainId here, let wagmi use the current connected chain
+          chainId: mainnet.id,
         });
         setTxHash(hash);
       }
     } catch (err) {
+      // Handle user rejection silently
+      if (isUserRejectionError(err)) {
+        return;
+      }
       console.error("Swap execution error:", err);
-      setTxError(err instanceof Error ? err.message : "Unknown error during swap");
+      setTxError("Transaction failed. Please try again.");
     }
   };
 
