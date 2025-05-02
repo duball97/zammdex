@@ -15,7 +15,7 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
-import { handleWalletError, isUserRejectionError } from "./utils";
+import { isUserRejectionError } from "./utils";
 
 interface ClaimVestedProps {
   coinId: bigint;
