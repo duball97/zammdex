@@ -7,7 +7,6 @@ import {
   usePublicClient,
   useSwitchChain,
   useChainId,
-  useBalance,
 } from "wagmi";
 import { handleWalletError, isUserRejectionError } from "./utils";
 import {
@@ -27,7 +26,7 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowDownUp, Plus } from "lucide-react";
+import { Loader2, ArrowDownUp, Plus, Minus } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -47,144 +46,6 @@ export interface TokenMeta {
   reserve0?: bigint; // ETH reserves in the pool
   reserve1?: bigint; // Token reserves in the pool
 }
-
-// Get initials for fallback display
-const getInitials = (symbol: string) => {
-  return symbol.slice(0, 2).toUpperCase();
-};
-
-// Color map for token initials
-const getColorForSymbol = (symbol: string) => {
-  const symbolKey = symbol.toLowerCase();
-  const colorMap: Record<string, { bg: string, text: string }> = {
-    'eth': { bg: 'bg-black', text: 'text-white' },
-    'za': { bg: 'bg-red-500', text: 'text-white' },
-    'pe': { bg: 'bg-green-700', text: 'text-white' },
-    'ro': { bg: 'bg-red-700', text: 'text-white' },
-    '..': { bg: 'bg-gray-800', text: 'text-white' },
-  };
-  
-  const initials = symbolKey.slice(0, 2);
-  return colorMap[initials] || { bg: 'bg-yellow-500', text: 'text-white' };
-};
-
-// Custom token image display with JSON metadata handling
-interface TokenImageProps {
-  token: TokenMeta;
-}
-
-const TokenImage: React.FC<TokenImageProps> = ({ token }) => {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [actualImageUrl, setActualImageUrl] = useState<string | null>(null);
-  const { bg, text } = getColorForSymbol(token.symbol);
-  
-  // Special case for ETH token with embedded SVG
-  if (token.id === null) { // ETH token
-    return (
-      <div className="relative w-8 h-8 rounded-full overflow-hidden">
-        <img
-          src={token.tokenUri}
-          alt="ETH logo"
-          className="w-8 h-8 object-cover rounded-full"
-        />
-      </div>
-    );
-  }
-  
-  // Try to fetch JSON metadata if the token URI might be a metadata URI
-  useEffect(() => {
-    const fetchMetadata = async () => {
-      if (!token.tokenUri) return;
-      
-      // Skip for data URIs like SVGs
-      if (token.tokenUri.startsWith('data:')) {
-        setActualImageUrl(token.tokenUri);
-        return;
-      }
-      
-      try {
-        // Handle IPFS URIs
-        const uri = token.tokenUri.startsWith('ipfs://') 
-          ? `https://content.wrappr.wtf/ipfs/${token.tokenUri.slice(7)}` 
-          : token.tokenUri;
-          
-        // Try to fetch as JSON (might be metadata)
-        const response = await fetch(uri);
-        const contentType = response.headers.get('content-type');
-        
-        // If it's JSON, try to extract image URL
-        if (contentType && contentType.includes('application/json')) {
-          const data = await response.json();
-          if (data && data.image) {
-            // Handle IPFS image URL
-            const imageUrl = data.image.startsWith('ipfs://') 
-              ? `https://content.wrappr.wtf/ipfs/${data.image.slice(7)}` 
-              : data.image;
-              
-            setActualImageUrl(imageUrl);
-            return;
-          }
-        }
-        
-        // If not valid JSON or no image field, use the URI directly
-        setActualImageUrl(uri);
-      } catch (err) {
-        console.error(`Error fetching metadata for ${token.symbol}:`, err);
-        setImageError(true);
-      }
-    };
-    
-    fetchMetadata();
-  }, [token.tokenUri, token.symbol]);
-  
-  // If token has no URI, show colored initial
-  if (!token.tokenUri) {
-    return (
-      <div className={`w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
-        {getInitials(token.symbol)}
-      </div>
-    );
-  }
-  
-  // Show loading placeholder if we don't have the actual image URL yet
-  if (!actualImageUrl && !imageError) {
-    return (
-      <div className="relative w-8 h-8 rounded-full overflow-hidden">
-        <div className="w-8 h-8 flex bg-gray-200 justify-center items-center rounded-full">
-          <img 
-            src="/coinchan-logo.png" 
-            alt="Loading" 
-            className="w-6 h-6 object-contain opacity-50"
-          />
-        </div>
-      </div>
-    );
-  }
-  
-  // Otherwise, try to load the token image
-  return (
-    <div className="relative w-8 h-8 rounded-full overflow-hidden">
-      {/* Show colored initials while loading or on error */}
-      {(!imageLoaded || imageError) && (
-        <div className={`absolute inset-0 w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
-          {getInitials(token.symbol)}
-        </div>
-      )}
-      
-      {/* Actual token image */}
-      {actualImageUrl && !imageError && (
-        <img
-          src={actualImageUrl}
-          alt={`${token.symbol} logo`}
-          className={`w-8 h-8 object-cover rounded-full ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
-          onLoad={() => setImageLoaded(true)}
-          onError={() => setImageError(true)}
-        />
-      )}
-    </div>
-  );
-};
 
 // Inline SVG for ETH
 const ETH_SVG = `<svg fill="#000000" width="800px" height="800px" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
@@ -455,12 +316,10 @@ const TokenSelector = ({
   selectedToken,
   tokens,
   onSelect,
-  userBalances,
 }: {
   selectedToken: TokenMeta;
   tokens: TokenMeta[];
   onSelect: (token: TokenMeta) => void;
-  userBalances: Record<string, bigint>; // Keyed by token ID
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectedValue = selectedToken.id?.toString() ?? "eth";
@@ -471,46 +330,142 @@ const TokenSelector = ({
     setIsOpen(false);
   };
   
-  // Format balance for display
-  const formatBalance = (token: TokenMeta): string | null => {
-    // For ETH (token.id === null)
-    if (token.id === null) {
-      const ethBalance = userBalances["eth"];
-      return ethBalance ? formatEther(ethBalance).substring(0, 7) : null;
-    } 
-    // For ERC tokens
-    else {
-      const tokenId = token.id.toString();
-      const balance = userBalances[tokenId];
-      return balance ? formatUnits(balance, 18).substring(0, 7) : null;
-    }
+  // Get initials for fallback display
+  const getInitials = (symbol: string) => {
+    return symbol.slice(0, 2).toUpperCase();
   };
   
-  // Get balance for selected token
-  const selectedTokenBalance = formatBalance(selectedToken);
+  // Color map for token initials - matching your screenshot
+  const getColorForSymbol = (symbol: string) => {
+    const symbolKey = symbol.toLowerCase();
+    const colorMap: Record<string, { bg: string, text: string }> = {
+      'eth': { bg: 'bg-black', text: 'text-white' },
+      'za': { bg: 'bg-red-500', text: 'text-white' },
+      'pe': { bg: 'bg-green-700', text: 'text-white' },
+      'ro': { bg: 'bg-red-700', text: 'text-white' },
+      '..': { bg: 'bg-gray-800', text: 'text-white' },
+    };
+    
+    const initials = symbolKey.slice(0, 2);
+    return colorMap[initials] || { bg: 'bg-yellow-500', text: 'text-white' };
+  };
+  
+  // Custom token image display with JSON metadata handling
+  const TokenImage = ({ token }: { token: TokenMeta }) => {
+    const [imageLoaded, setImageLoaded] = useState(false);
+    const [imageError, setImageError] = useState(false);
+    const [actualImageUrl, setActualImageUrl] = useState<string | null>(null);
+    const { bg, text } = getColorForSymbol(token.symbol);
+    
+    // Try to fetch JSON metadata if the token URI might be a metadata URI
+    useEffect(() => {
+      const fetchMetadata = async () => {
+        if (!token.tokenUri) return;
+        
+        // Skip for data URIs like the ETH SVG
+        if (token.tokenUri.startsWith('data:')) {
+          setActualImageUrl(token.tokenUri);
+          return;
+        }
+        
+        try {
+          // Handle IPFS URIs
+          const uri = token.tokenUri.startsWith('ipfs://') 
+            ? `https://content.wrappr.wtf/ipfs/${token.tokenUri.slice(7)}` 
+            : token.tokenUri;
+            
+          // Try to fetch as JSON (might be metadata)
+          const response = await fetch(uri);
+          const contentType = response.headers.get('content-type');
+          
+          // If it's JSON, try to extract image URL
+          if (contentType && contentType.includes('application/json')) {
+            const data = await response.json();
+            if (data && data.image) {
+              // Handle IPFS image URL
+              const imageUrl = data.image.startsWith('ipfs://') 
+                ? `https://content.wrappr.wtf/ipfs/${data.image.slice(7)}` 
+                : data.image;
+                
+              setActualImageUrl(imageUrl);
+              return;
+            }
+          }
+          
+          // If not valid JSON or no image field, use the URI directly
+          setActualImageUrl(uri);
+        } catch (err) {
+          console.error(`Error fetching metadata for ${token.symbol}:`, err);
+          setImageError(true);
+        }
+      };
+      
+      fetchMetadata();
+    }, [token.tokenUri, token.symbol]);
+    
+    // If token has no URI, show colored initial
+    if (!token.tokenUri) {
+      return (
+        <div className={`w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
+          {getInitials(token.symbol)}
+        </div>
+      );
+    }
+    
+    // Show loading placeholder if we don't have the actual image URL yet
+    if (!actualImageUrl && !imageError) {
+      return (
+        <div className="relative w-8 h-8 rounded-full overflow-hidden">
+          <div className="w-8 h-8 flex bg-gray-200 justify-center items-center rounded-full">
+            <img 
+              src="/coinchan-logo.png" 
+              alt="Loading" 
+              className="w-6 h-6 object-contain opacity-50"
+            />
+          </div>
+        </div>
+      );
+    }
+    
+    // Otherwise, try to load the token image
+    return (
+      <div className="relative w-8 h-8 rounded-full overflow-hidden">
+        {/* Show colored initials while loading or on error */}
+        {(!imageLoaded || imageError) && (
+          <div className={`absolute inset-0 w-8 h-8 flex ${bg} ${text} justify-center items-center rounded-full text-xs font-medium`}>
+            {getInitials(token.symbol)}
+          </div>
+        )}
+        
+        {/* Actual token image */}
+        {actualImageUrl && !imageError && (
+          <img
+            src={actualImageUrl}
+            alt={`${token.symbol} logo`}
+            className={`w-8 h-8 object-cover rounded-full ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+          />
+        )}
+      </div>
+    );
+  };
   
   return (
     <div className="relative">
-      {/* Selected token display with thumbnail and balance */}
+      {/* Selected token display with thumbnail */}
       <div 
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50"
       >
         <TokenImage token={selectedToken} />
-        <div className="flex flex-col">
-          <span className="font-medium">{selectedToken.symbol}</span>
-          {selectedTokenBalance && (
-            <span className="text-xs text-gray-500">
-              Balance: {selectedTokenBalance}
-            </span>
-          )}
-        </div>
+        <span className="font-medium">{selectedToken.symbol}</span>
         <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
         </svg>
       </div>
       
-      {/* Dropdown list with thumbnails and balances */}
+      {/* Dropdown list with thumbnails */}
       {isOpen && (
         <div className="absolute z-20 mt-1 w-64 max-h-96 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
           {tokens.map((token) => {
@@ -541,7 +496,6 @@ const TokenSelector = ({
             };
             
             const reserves = formatReserves(token);
-            const tokenBalance = formatBalance(token);
             
             return (
               <div 
@@ -554,14 +508,9 @@ const TokenSelector = ({
                 <TokenImage token={token} />
                 <div className="flex flex-col">
                   <span className="font-medium">{token.symbol}</span>
-                  <div className="text-xs">
-                    {tokenBalance && (
-                      <span className="text-gray-600">Balance: {tokenBalance}</span>
-                    )}
-                    {reserves && (
-                      <span className="text-gray-500 ml-1">{tokenBalance ? '•' : ''} {reserves}</span>
-                    )}
-                  </div>
+                  {reserves && (
+                    <span className="text-xs text-gray-500">{reserves}</span>
+                  )}
                 </div>
               </div>
             );
@@ -576,7 +525,7 @@ const TokenSelector = ({
   Mode types and constants
 ──────────────────────────────────────────────────────────────────────────── */
 type TileMode = "swap" | "liquidity";
-type LiquidityMode = "add" | "remove" | "create";
+type LiquidityMode = "add" | "remove";
 
 /* ────────────────────────────────────────────────────────────────────────────
   SwapTile main component
@@ -590,95 +539,11 @@ export const SwapTile = () => {
   const [lpTokenBalance, setLpTokenBalance] = useState<bigint>(0n);
   const [lpBurnAmount, setLpBurnAmount] = useState<string>("");
   
-  // State for creating new pool
-  const [customTokenId, setCustomTokenId] = useState<string>("");
-  const [customSwapFee, setCustomSwapFee] = useState<string>("1.00");
-  const [poolExists, setPoolExists] = useState<boolean | null>(null);
-  
-  // State for resolved coin information 
-  const [resolvedCoin, setResolvedCoin] = useState<{
-    id: bigint;
-    name: string;
-    symbol: string;
-    tokenUri: string;
-  } | null>(null);
-  const [isResolvingCoin, setIsResolvingCoin] = useState<boolean>(false);
-  
-  // User token balances
-  const [userBalances, setUserBalances] = useState<Record<string, bigint>>({});
-  
   // Get the public client for contract interactions
   const publicClient = usePublicClient({ chainId: mainnet.id });
   
-  // Get account for balance fetching
-  const { address: userAddress } = useAccount();
-  
-  // Fetch ETH balance
-  const { data: ethBalance } = useBalance({
-    address: userAddress,
-    chainId: mainnet.id,
-    query: {
-      enabled: !!userAddress,
-    }
-  });
-  
   // Debug info
   const tokenCount = tokens.length;
-  
-  // Update ETH balance whenever it changes
-  useEffect(() => {
-    if (ethBalance) {
-      setUserBalances(prev => ({
-        ...prev,
-        eth: ethBalance.value
-      }));
-    }
-  }, [ethBalance]);
-  
-  // Fetch token balances for all loaded tokens
-  useEffect(() => {
-    if (!userAddress || !publicClient || tokens.length <= 1) return;
-    
-    const fetchTokenBalances = async () => {
-      try {
-        // Create a batch of balance fetch promises for all loaded tokens
-        const balancePromises = tokens
-          .filter(token => token.id !== null) // Skip ETH token, handled separately
-          .map(async (token) => {
-            try {
-              const balance = await publicClient.readContract({
-                address: CoinsAddress,
-                abi: CoinsAbi,
-                functionName: "balanceOf",
-                args: [userAddress, token.id!],
-              }) as bigint;
-              
-              return { id: token.id!.toString(), balance };
-            } catch (err) {
-              console.error(`Failed to fetch balance for token ${token.id}:`, err);
-              return { id: token.id!.toString(), balance: 0n };
-            }
-          });
-        
-        // Process the results
-        const results = await Promise.all(balancePromises);
-        
-        // Convert to user balances record
-        const newBalances: Record<string, bigint> = { ...userBalances };
-        
-        results.forEach(({ id, balance }) => {
-          newBalances[id] = balance;
-        });
-        
-        // Update user balances
-        setUserBalances(newBalances);
-      } catch (err) {
-        console.error("Error fetching token balances:", err);
-      }
-    };
-    
-    fetchTokenBalances();
-  }, [userAddress, publicClient, tokens]);
   
   // Set initial buyToken once tokens are loaded
   useEffect(() => {
@@ -687,18 +552,6 @@ export const SwapTile = () => {
       setBuyToken(tokens[1]);
     }
   }, [tokens, buyToken]);
-  
-  // Resolve coin metadata when customTokenId changes
-  useEffect(() => {
-    if (liquidityMode === "create" && customTokenId) {
-      // Only trigger if ID is valid and has at least 3 characters
-      if (/^\d+$/.test(customTokenId) && customTokenId.length >= 1) {
-        resolveCoinMetadata(customTokenId);
-      } else {
-        setResolvedCoin(null);
-      }
-    }
-  }, [customTokenId, liquidityMode, publicClient]);
 
   // Handle token selection
   const handleSellTokenSelect = (token: TokenMeta) => {
@@ -739,37 +592,12 @@ export const SwapTile = () => {
   const { address, isConnected } = useAccount();
   const { writeContractAsync, isPending, error: writeError } = useWriteContract();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
-  // Using switchChainAsync instead of switchChain, and removed chainId param from transactions
-  // This fixes "connection.connector.getChainId is not a function" errors with newer Wagmi versions
-  const { switchChainAsync } = useSwitchChain();
+  const { switchChain } = useSwitchChain();
   const chainId = useChainId();
   
   /* Calculate pool reserves */
   const [reserves, setReserves] = useState<{ reserve0: bigint, reserve1: bigint } | null>(null);
   const [targetReserves, setTargetReserves] = useState<{ reserve0: bigint, reserve1: bigint } | null>(null);
-
-  // Function to check if a pool exists
-  const checkPoolExists = async (tokenId: bigint): Promise<boolean> => {
-    if (!tokenId || tokenId === 0n || !publicClient) return false;
-    
-    try {
-      const poolId = computePoolId(tokenId);
-      const result = await publicClient.readContract({
-        address: ZAAMAddress,
-        abi: ZAAMAbi,
-        functionName: "pools",
-        args: [poolId],
-      });
-      
-      const poolData = result as unknown as readonly bigint[];
-      
-      // Pool exists if it has reserves (not both zero)
-      return poolData[0] > 0n || poolData[1] > 0n;
-    } catch (err) {
-      console.error("Failed to check if pool exists:", err);
-      return false;
-    }
-  };
 
   // Fetch reserves directly
   useEffect(() => {
@@ -794,13 +622,9 @@ export const SwapTile = () => {
           reserve0: poolData[0],
           reserve1: poolData[1]
         });
-        
-        // Update pool existence state
-        setPoolExists(poolData[0] > 0n || poolData[1] > 0n);
       } catch (err) {
         console.error("Failed to fetch reserves:", err);
         setReserves(null);
-        setPoolExists(false);
       }
     };
     
@@ -891,12 +715,6 @@ export const SwapTile = () => {
 
   /* helpers to sync amounts */
   const syncFromSell = async (val: string) => {
-    // In create pool mode, don't auto-calculate the other side
-    if (mode === "liquidity" && liquidityMode === "create") {
-      setSellAmt(val);
-      return; // Don't calculate anything - both sides are independent
-    }
-    
     // In Remove Liquidity mode, track the LP burn amount separately
     if (mode === "liquidity" && liquidityMode === "remove") {
       setLpBurnAmount(val);
@@ -1019,12 +837,6 @@ export const SwapTile = () => {
   };
 
   const syncFromBuy = async (val: string) => {
-    // In create pool mode, don't auto-calculate the other side
-    if (mode === "liquidity" && liquidityMode === "create") {
-      setBuyAmt(val);
-      return; // Don't calculate anything - both sides are independent
-    }
-    
     setBuyAmt(val);
     if (!canSwap || !reserves) return setSellAmt("");
     
@@ -1067,70 +879,6 @@ export const SwapTile = () => {
   /* perform swap */
   const nowSec = () => BigInt(Math.floor(Date.now() / 1000));
   
-  // Function to resolve a coin ID to its metadata
-  const resolveCoinMetadata = async (coinIdStr: string) => {
-    if (!coinIdStr || !publicClient) {
-      setResolvedCoin(null);
-      return;
-    }
-    
-    try {
-      setIsResolvingCoin(true);
-      
-      const coinId = BigInt(coinIdStr);
-      if (coinId === 0n) {
-        setResolvedCoin(null);
-        return;
-      }
-      
-      // Batch call to get name, symbol, and tokenURI
-      const [nameResult, symbolResult, tokenUriResult] = await Promise.allSettled([
-        publicClient.readContract({
-          address: CoinsAddress,
-          abi: CoinsAbi,
-          functionName: "name",
-          args: [coinId],
-        }),
-        publicClient.readContract({
-          address: CoinsAddress,
-          abi: CoinsAbi,
-          functionName: "symbol",
-          args: [coinId],
-        }),
-        publicClient.readContract({
-          address: CoinsAddress,
-          abi: CoinsAbi,
-          functionName: "tokenURI",
-          args: [coinId],
-        }),
-      ]);
-      
-      // Extract results or use fallbacks
-      const name = nameResult.status === "fulfilled" 
-        ? nameResult.value as string 
-        : `Coin #${coinId.toString()}`;
-      
-      const symbol = symbolResult.status === "fulfilled" 
-        ? symbolResult.value as string 
-        : `C#${coinId.toString().slice(0, 3)}`;
-      
-      const tokenUri = tokenUriResult.status === "fulfilled"
-        ? tokenUriResult.value as string
-        : "";
-      
-      // Check pool existence
-      const exists = await checkPoolExists(coinId);
-      setPoolExists(exists);
-      
-      setResolvedCoin({ id: coinId, name, symbol, tokenUri });
-    } catch (err) {
-      console.error("Error resolving coin metadata:", err);
-      setResolvedCoin(null);
-    } finally {
-      setIsResolvingCoin(false);
-    }
-  };
-  
   const executeRemoveLiquidity = async () => {
     // Validate inputs
     if (!reserves || !address || !publicClient) {
@@ -1156,7 +904,7 @@ export const SwapTile = () => {
       // Switch to mainnet if needed
       if (chainId !== mainnet.id) {
         try {
-          await switchChainAsync({ chainId: mainnet.id });
+          await switchChain({ chainId: mainnet.id });
         } catch (err) {
           // Only set error if it's not a user rejection
           if (!isUserRejectionError(err)) {
@@ -1190,6 +938,7 @@ export const SwapTile = () => {
           address,
           deadline,
         ],
+        chainId: mainnet.id,
       });
       
       setTxHash(hash);
@@ -1202,166 +951,7 @@ export const SwapTile = () => {
     }
   };
 
-  const executeCreatePool = async () => {
-    // Validate inputs for creating a new pool
-    if (!address || !publicClient) {
-      setTxError("Wallet not connected");
-      return;
-    }
-    
-    if (!sellAmt || parseFloat(sellAmt) <= 0) {
-      setTxError("Please enter a valid ETH amount");
-      return;
-    }
-    
-    if (!buyAmt || parseFloat(buyAmt) <= 0) {
-      setTxError("Please enter a valid token amount");
-      return;
-    }
-    
-    // For creating a new pool, we need to validate the token ID
-    // Use resolved coin ID if available, otherwise use the input value directly
-    const tokenId = resolvedCoin ? resolvedCoin.id : BigInt(customTokenId || (buyToken?.id?.toString() || "0"));
-    if (tokenId === 0n) {
-      setTxError("Please enter a valid token ID");
-      return;
-    }
-    
-    // Check if pool already exists (either from resolved data or by direct check)
-    if (poolExists === true) {
-      setTxError(`Pool for ${resolvedCoin?.symbol || `Token #${tokenId}`} already exists. Please use Add Liquidity instead.`);
-      return;
-    }
-    
-    // If we haven't checked pool existence yet, do it now
-    if (poolExists === null) {
-      try {
-        const exists = await checkPoolExists(tokenId);
-        if (exists) {
-          setTxError(`Pool for Token #${tokenId} already exists. Please use Add Liquidity instead.`);
-          return;
-        }
-      } catch (err) {
-        console.error("Error checking if pool exists:", err);
-      }
-    }
-    
-    // Parse the swap fee from percentage to basis points
-    const swapFeeBps = Math.round(parseFloat(customSwapFee) * 100);
-    if (isNaN(swapFeeBps) || swapFeeBps < 0 || swapFeeBps > 1000) {
-      setTxError("Swap fee must be between 0.00% and 10.00%");
-      return;
-    }
-    
-    setTxError(null);
-    
-    try {
-      // Switch to mainnet if needed
-      if (chainId !== mainnet.id) {
-        try {
-          await switchChainAsync({ chainId: mainnet.id });
-        } catch (err) {
-          // Only set error if it's not a user rejection
-          if (!isUserRejectionError(err)) {
-            console.error("Failed to switch to Ethereum mainnet:", err);
-            setTxError("Failed to switch to Ethereum mainnet");
-          }
-          return;
-        }
-      }
-      
-      // Create the pool key for new pool
-      const poolKey = {
-        id0: 0n, // ETH has ID 0
-        id1: tokenId,
-        token0: zeroAddress, // ETH is always token0
-        token1: CoinsAddress,
-        swapFee: BigInt(swapFeeBps),
-      };
-      
-      const deadline = nowSec() + BigInt(DEADLINE_SEC);
-      
-      // Parse amounts
-      const ethAmount = parseEther(sellAmt);
-      const tokenAmount = parseUnits(buyAmt, 18);
-      
-      // Calculate minimum amounts with slippage protection
-      const ethAmountMin = withSlippage(ethAmount);
-      const tokenAmountMin = withSlippage(tokenAmount);
-      
-      // Check if the user needs to approve ZAMM as operator for the token
-      if (isOperator === false) {
-        try {
-          console.log("Setting ZAMM as operator for token transfers");
-          await writeContractAsync({
-            address: CoinsAddress,
-            abi: CoinsAbi,
-            functionName: "setOperator",
-            args: [ZAAMAddress, true],
-          });
-          setIsOperator(true);
-        } catch (err) {
-          // Handle user rejection silently
-          if (isUserRejectionError(err)) {
-            return;
-          }
-          console.error("Failed to approve operator:", err);
-          setTxError("Failed to approve the liquidity contract as operator");
-          return;
-        }
-      }
-      
-      console.log(`Creating new pool - Token ID: ${tokenId}, Swap Fee: ${swapFeeBps} bps`);
-      console.log(`Adding initial liquidity - ETH: ${formatEther(ethAmount)}, Token: ${formatUnits(tokenAmount, 18)}`);
-      
-      // For new pools, we don't need to use ZAMMHelper as there's no existing ratio to match
-      const hash = await writeContractAsync({
-        address: ZAAMAddress,
-        abi: ZAAMAbi,
-        functionName: "addLiquidity",
-        args: [
-          poolKey,
-          ethAmount,
-          tokenAmount,
-          ethAmountMin,
-          tokenAmountMin,
-          address,
-          deadline,
-        ],
-        value: ethAmount,
-      });
-      
-      setTxHash(hash);
-      
-      // After creating the pool, set mode back to regular add liquidity
-      setLiquidityMode("add");
-      
-    } catch (err) {
-      // Handle specific error types but ignore user rejections
-      if (isUserRejectionError(err)) {
-        return;
-      }
-      
-      console.error("Create pool error:", err);
-      
-      if (err instanceof Error) {
-        if (err.message.includes("insufficient funds")) {
-          setTxError("Insufficient funds for this transaction");
-        } else {
-          setTxError("Failed to create pool. Please try again.");
-        }
-      } else {
-        setTxError("Unknown error during pool creation");
-      }
-    }
-  };
-
   const executeAddLiquidity = async () => {
-    // Handle creating a new pool if that's the current mode
-    if (liquidityMode === "create") {
-      return executeCreatePool();
-    }
-    
     // More specific input validation to catch issues early
     if (!canSwap || !reserves || !address || !publicClient) {
       setTxError("Missing required data for transaction");
@@ -1384,7 +974,7 @@ export const SwapTile = () => {
       // Switch to mainnet if needed
       if (chainId !== mainnet.id) {
         try {
-          await switchChainAsync({ chainId: mainnet.id });
+          await switchChain({ chainId: mainnet.id });
         } catch (err) {
           // Only set error if it's not a user rejection
           if (!isUserRejectionError(err)) {
@@ -1430,6 +1020,7 @@ export const SwapTile = () => {
             abi: CoinsAbi,
             functionName: "setOperator",
             args: [ZAAMAddress, true],
+            chainId: mainnet.id,
           });
           setIsOperator(true);
         } catch (err) {
@@ -1495,6 +1086,7 @@ export const SwapTile = () => {
             deadline,
           ],
           value: ethAmount, // Use the exact ETH amount calculated by ZAMMHelper
+          chainId: mainnet.id,
         });
         
         setTxHash(hash);
@@ -1542,7 +1134,7 @@ export const SwapTile = () => {
       // Switch to mainnet if needed
       if (chainId !== mainnet.id) {
         try {
-          await switchChainAsync({ chainId: mainnet.id });
+          await switchChain({ chainId: mainnet.id });
         } catch (err) {
           // Only set error if it's not a user rejection
           if (!isUserRejectionError(err)) {
@@ -1582,6 +1174,7 @@ export const SwapTile = () => {
             nowSec() + BigInt(DEADLINE_SEC),
           ],
           value: amountInWei,
+          chainId: mainnet.id,
         });
         setTxHash(hash);
       } else {
@@ -1595,6 +1188,7 @@ export const SwapTile = () => {
               abi: CoinsAbi,
               functionName: "setOperator",
               args: [ZAAMAddress, true],
+              chainId: mainnet.id,
             });
             setIsOperator(true);
           } catch (err) {
@@ -1669,6 +1263,7 @@ export const SwapTile = () => {
               abi: ZAAMAbi,
               functionName: "multicall",
               args: [multicallData],
+              chainId: mainnet.id,
             });
             
             console.log(`Transaction hash: ${hash}`);
@@ -1710,6 +1305,7 @@ export const SwapTile = () => {
             address,
             nowSec() + BigInt(DEADLINE_SEC),
           ],
+          chainId: mainnet.id,
         });
         setTxHash(hash);
       }
@@ -1756,46 +1352,10 @@ export const SwapTile = () => {
               className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
             >
               <Plus className="h-4 w-4 mr-1" />
-              Liquidity
+              Add Liquidity
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        
-        {/* Liquidity mode sub-tabs */}
-        {mode === "liquidity" && (
-          <div className="flex mb-3 space-x-2 text-sm">
-            <button 
-              onClick={() => setLiquidityMode("add")}
-              className={`px-3 py-1.5 rounded-md transition-colors ${
-                liquidityMode === "add" 
-                  ? "bg-yellow-100 font-medium text-yellow-900" 
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Add Liquidity
-            </button>
-            <button 
-              onClick={() => setLiquidityMode("remove")}
-              className={`px-3 py-1.5 rounded-md transition-colors ${
-                liquidityMode === "remove" 
-                  ? "bg-yellow-100 font-medium text-yellow-900" 
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Remove
-            </button>
-            <button 
-              onClick={() => setLiquidityMode("create")}
-              className={`px-3 py-1.5 rounded-md transition-colors ${
-                liquidityMode === "create" 
-                  ? "bg-yellow-100 font-medium text-yellow-900" 
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Create Pool
-            </button>
-          </div>
-        )}
         
         {/* Load error notification */}
         {loadError && (
@@ -1836,154 +1396,26 @@ export const SwapTile = () => {
             </div>
           )}
           
-          {/* Create Pool Panel (only visible in Create Pool mode) */}
-          {mode === "liquidity" && liquidityMode === "create" && (
-            <div className="border-2 border-yellow-500 group hover:bg-yellow-50 rounded-2xl p-3 mb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-3 bg-yellow-50">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-yellow-800">Create New Pool</span>
-                
-                {/* Status indicator */}
-                {customTokenId && (
-                  <div className="flex items-center">
-                    {isResolvingCoin ? (
-                      <div className="flex items-center text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                        <div className="w-3 h-3 mr-1 border-2 border-blue-500 border-b-transparent rounded-full animate-spin"></div>
-                        Resolving...
-                      </div>
-                    ) : resolvedCoin ? (
-                      <div className={`flex items-center text-xs px-2 py-0.5 rounded-full ${
-                        poolExists 
-                          ? "bg-red-100 text-red-800" 
-                          : "bg-green-100 text-green-800"
-                      }`}>
-                        {poolExists ? "Pool exists" : "Valid token"}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-1 gap-3">
-                {/* Token ID input with better layout */}
-                <div className="flex flex-col">
-                  <label className="text-sm text-gray-700 mb-1 font-medium">Token ID:</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      placeholder="Enter token ID (e.g. 123)"
-                      value={customTokenId}
-                      onChange={(e) => setCustomTokenId(e.target.value)}
-                      className="text-sm p-2 pl-3 pr-16 border border-gray-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                    />
-                    {resolvedCoin && !isResolvingCoin && (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 bg-yellow-200 px-2 py-0.5 rounded-full text-xs font-medium text-yellow-800">
-                        {resolvedCoin.symbol}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Resolved Token Display */}
-                  {resolvedCoin && (
-                    <div className="flex items-center mt-1.5 ml-1">
-                      <div className="mr-2 w-5 h-5 overflow-hidden rounded-full bg-gray-100 flex-shrink-0">
-                        <TokenImage token={resolvedCoin} />
-                      </div>
-                      <span className="text-xs text-gray-600 truncate">
-                        {resolvedCoin.name}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Swap Fee with improved layout */}
-                <div className="flex flex-col">
-                  <label className="text-sm text-gray-700 mb-1 font-medium">Swap Fee (%):</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    step="0.01"
-                    placeholder="1.00"
-                    value={customSwapFee}
-                    onChange={(e) => setCustomSwapFee(e.target.value)}
-                    className="text-sm p-2 border border-gray-300 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                  />
-                </div>
-                
-                {/* Price preview */}
-                {sellAmt && buyAmt && parseFloat(sellAmt) > 0 && parseFloat(buyAmt) > 0 && (
-                  <div className="border border-yellow-300 bg-yellow-50 rounded-md p-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-medium text-yellow-800">Initial Price:</span>
-                      <span className="text-yellow-900">
-                        {parseFloat(sellAmt) > 0 && parseFloat(buyAmt) > 0 ? (
-                          <>
-                            1 ETH = {(parseFloat(buyAmt) / parseFloat(sellAmt)).toLocaleString()} {resolvedCoin?.symbol || "Token"}
-                          </>
-                        ) : null}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs mt-1">
-                      <span className="font-medium text-yellow-800">Token Price:</span>
-                      <span className="text-yellow-900">
-                        {parseFloat(sellAmt) > 0 && parseFloat(buyAmt) > 0 ? (
-                          <>
-                            1 {resolvedCoin?.symbol || "Token"} = {(parseFloat(sellAmt) / parseFloat(buyAmt)).toLocaleString()} ETH
-                          </>
-                        ) : null}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              {/* Improved help text */}
-              <div className="text-xs text-yellow-700 mt-1 bg-yellow-50/70 p-1.5 rounded border border-yellow-200">
-                <p className="font-medium mb-1">You'll be the first liquidity provider:</p>
-                <ul className="list-disc pl-4 space-y-0.5">
-                  <li><strong>You determine the initial price</strong> through the ratio of ETH to tokens</li>
-                  <li>For example, 1 ETH : 1000 tokens sets a price of 1000 tokens per ETH</li>
-                  <li>Both input fields are independent - no automatic calculation</li>
-                  <li>You'll receive LP tokens representing your position</li>
-                </ul>
-              </div>
-            </div>
-          )}
-          
           {/* SELL/PROVIDE panel */}
           <div className={`border-2 border-yellow-300 group hover:bg-yellow-50 ${mode === "liquidity" && liquidityMode === "remove" ? "rounded-md" : "rounded-t-2xl"} p-2 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2 ${mode === "liquidity" && liquidityMode === "remove" ? "mt-2" : ""}`}>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
                 {mode === "swap" ? "Sell" : 
                   liquidityMode === "add" ? "Provide" : 
-                  liquidityMode === "create" ? "Provide ETH" :
                   "You'll Receive (ETH)"}
               </span>
-              {/* In create pool mode, always show ETH instead of dropdown */}
-              {mode === "liquidity" && liquidityMode === "create" ? (
-                <div className="flex items-center bg-transparent border border-yellow-200 rounded-md px-2 py-1">
-                  <div className="w-8 h-8 mr-2">
-                    <TokenImage token={ETH_TOKEN} />
-                  </div>
-                  <span className="font-medium">ETH</span>
-                </div>
-              ) : (
-                <TokenSelector
-                  selectedToken={sellToken}
-                  tokens={tokens}
-                  onSelect={handleSellTokenSelect}
-                  userBalances={userBalances}
-                />
-              )}
+              <TokenSelector
+                selectedToken={sellToken}
+                tokens={tokens}
+                onSelect={handleSellTokenSelect}
+              />
             </div>
             <div className="flex justify-between items-center">
               <input
                 type="number"
                 min="0"
                 step="any"
-                placeholder={liquidityMode === "create" ? "Enter ETH amount (sets price)" : "0.0"}
+                placeholder="0.0"
                 value={sellAmt}
                 onChange={(e) => syncFromSell(e.target.value)}
                 className="text-xl font-medium w-full focus:outline-none"
@@ -1996,64 +1428,40 @@ export const SwapTile = () => {
           </div>
           
           {/* FLIP/PLUS/MINUS button */}
-          {/* Hide the button in create pool mode and remove liquidity mode, show it in other modes */}
-          {!(mode === "liquidity" && (liquidityMode === "create" || liquidityMode === "remove")) && (
-            <button
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 active:scale-95 transition-all z-10"
-              onClick={mode === "swap" ? flipTokens : () => setLiquidityMode("remove")}
-            >
-              {mode === "swap" ? (
-                <ArrowDownUp className="h-4 w-4 text-white" />
-              ) : (
-                <Plus className="h-4 w-4 text-white" />
-              )}
-            </button>
-          )}
+          <button
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 active:scale-95 transition-all z-10"
+            onClick={mode === "swap" ? flipTokens : () => setLiquidityMode(liquidityMode === "add" ? "remove" : "add")}
+          >
+            {mode === "swap" ? (
+              <ArrowDownUp className="h-4 w-4 text-white" />
+            ) : liquidityMode === "add" ? (
+              <Plus className="h-4 w-4 text-white" />
+            ) : (
+              <Minus className="h-4 w-4 text-white" />
+            )}
+          </button>
 
           {/* BUY/RECEIVE panel */}
-          {(buyToken || (mode === "liquidity" && liquidityMode === "create")) && (
+          {buyToken && (
             <div className="border-2 border-yellow-300 group rounded-b-2xl p-2 pt-3 focus-within:ring-2 hover:bg-yellow-50 focus-within:ring-primary flex flex-col gap-2 mt-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
                   {mode === "swap" ? "Buy" : 
                     liquidityMode === "add" ? "And" : 
-                    liquidityMode === "create" ? `Provide Token` :
-                    `You'll Receive (${buyToken?.symbol})`}
+                    `You'll Receive (${buyToken.symbol})`}
                 </span>
-                {/* In create pool mode, show resolved token instead of dropdown */}
-                {mode === "liquidity" && liquidityMode === "create" && resolvedCoin ? (
-                  <div className="flex items-center bg-transparent border border-yellow-200 rounded-md px-2 py-1">
-                    <div className="w-8 h-8 mr-2">
-                      <TokenImage token={resolvedCoin} />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{resolvedCoin.symbol}</span>
-                      <span className="text-xs text-gray-500">{
-                        userAddress && userBalances[resolvedCoin.id.toString()] ?
-                          `Balance: ${formatUnits(userBalances[resolvedCoin.id.toString()], 18).substring(0, 7)}` :
-                          resolvedCoin.name.length > 15 ? 
-                            resolvedCoin.name.slice(0, 15) + '...' :
-                            resolvedCoin.name
-                      }</span>
-                    </div>
-                  </div>
-                ) : (
-                  <TokenSelector
-                    selectedToken={buyToken || tokens[0]} /* Ensure we always have a valid token */
-                    tokens={tokens}
-                    onSelect={handleBuyTokenSelect}
-                    userBalances={userBalances}
-                  />
-                )}
+                <TokenSelector
+                  selectedToken={buyToken}
+                  tokens={tokens}
+                  onSelect={handleBuyTokenSelect}
+                />
               </div>
               <div className="flex justify-between items-center">
                 <input
                   type="number"
                   min="0"
                   step="any"
-                  placeholder={liquidityMode === "create" && resolvedCoin 
-                    ? `Enter ${resolvedCoin.symbol} amount (sets price)` 
-                    : "0.0"}
+                  placeholder="0.0"
                   value={buyAmt}
                   onChange={(e) => syncFromBuy(e.target.value)}
                   className="text-xl font-medium w-full focus:outline-none"
@@ -2086,7 +1494,7 @@ export const SwapTile = () => {
                   <li>Withdraw your liquidity anytime</li>
                 </ul>
               </>
-            ) : liquidityMode === "remove" ? (
+            ) : (
               <>
                 <p className="font-medium mb-1">Remove Liquidity:</p>
                 <ul className="list-disc pl-4 space-y-0.5">
@@ -2095,38 +1503,12 @@ export const SwapTile = () => {
                   <li>Preview shows expected return of ETH and tokens</li>
                 </ul>
               </>
-            ) : (
-              <>
-                <p className="font-medium mb-1">Create New Pool:</p>
-                <ul className="list-disc pl-4 space-y-0.5">
-                  <li>First liquidity provider sets the initial price ratio</li>
-                  <li>Enter the amounts of ETH and tokens independently</li>
-                  <li>Initial ratio: {sellAmt && buyAmt && parseFloat(sellAmt) > 0 && parseFloat(buyAmt) > 0 ? 
-                     `${parseFloat(sellAmt)} ETH : ${parseFloat(buyAmt)} ${resolvedCoin?.symbol || "Token"}` : 
-                     "Enter both amounts to see ratio"}</li>
-                  <li>Standard fee is 1.00% but you can customize it</li>
-                </ul>
-              </>
             )}
           </div>
         )}
         
         {/* Pool information */}
-        {liquidityMode === "create" ? (
-          <div className="text-xs flex justify-between px-1 mt-1">
-            <span className="flex items-center">
-              <span className="bg-yellow-200 text-yellow-800 px-1.5 py-0.5 rounded-full mr-1 font-medium">New Pool</span>
-              <span className="flex items-center">
-                <span className="font-medium">ETH</span>
-                <svg className="w-3 h-3 mx-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M7 10l5 5 5-5"></path>
-                </svg>
-                <span className="font-medium">{resolvedCoin ? resolvedCoin.symbol : "Token"}</span>
-              </span>
-            </span>
-            <span className="font-medium">{parseFloat(customSwapFee) || 1.00}% Fee</span>
-          </div>
-        ) : (canSwap && reserves && (
+        {canSwap && reserves && (
           <div className="text-xs text-gray-500 flex justify-between px-1 mt-1">
             {mode === "swap" && isCoinToCoin ? (
               <span className="flex items-center">
@@ -2138,7 +1520,7 @@ export const SwapTile = () => {
             )}
             <span>Fee: {mode === "swap" && isCoinToCoin ? Number(SWAP_FEE) * 2 / 100 : Number(SWAP_FEE) / 100}%</span>
           </div>
-        ))}
+        )}
 
         {/* ACTION BUTTON */}
         <Button
@@ -2147,15 +1529,12 @@ export const SwapTile = () => {
               ? executeSwap 
               : liquidityMode === "add" 
                 ? executeAddLiquidity 
-                : liquidityMode === "create"
-                  ? executeAddLiquidity // This will call executeCreatePool internally
-                  : executeRemoveLiquidity
+                : executeRemoveLiquidity
           }
           disabled={
             !isConnected || 
             (mode === "swap" && (!canSwap || !sellAmt)) ||
             (mode === "liquidity" && liquidityMode === "add" && (!canSwap || !sellAmt)) ||
-            (mode === "liquidity" && liquidityMode === "create" && (!sellAmt || !buyAmt || !customTokenId)) ||
             (mode === "liquidity" && liquidityMode === "remove" && (!lpBurnAmount || parseFloat(lpBurnAmount) <= 0 || parseUnits(lpBurnAmount || "0", 18) > lpTokenBalance)) ||
             isPending
           }
@@ -2168,24 +1547,20 @@ export const SwapTile = () => {
                 ? "Swapping…" 
                 : liquidityMode === "add" 
                   ? "Adding Liquidity…" 
-                  : liquidityMode === "create"
-                    ? "Creating Pool…"
-                    : "Removing Liquidity…"
+                  : "Removing Liquidity…"
               }
             </span>
           ) : mode === "swap" 
             ? "Swap" 
             : liquidityMode === "add" 
               ? "Add Liquidity" 
-              : liquidityMode === "create"
-                ? "Create Pool"
-                : "Remove Liquidity"
+              : "Remove Liquidity"
           }
         </Button>
 
-        {/* Error handling - only show non-user rejection errors */}
-        {((writeError && !isUserRejectionError(writeError)) || txError) && (
-          <div className="text-sm text-red-600 mt-2">{(writeError && !isUserRejectionError(writeError)) ? writeError.message : txError}</div>
+        {/* Error handling */}
+        {(writeError || txError) && (
+          <div className="text-sm text-red-600 mt-2">{writeError?.message || txError}</div>
         )}
         
         {/* Success message */}
