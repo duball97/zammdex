@@ -23,6 +23,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { mainnet } from "viem/chains";
+import { useCoinMeta } from "./hooks/use-coin-meta";
+import { DisplayTokenUri } from "./DisplayTokenUri";
+import { useQuery } from "@tanstack/react-query";
+import { handleWalletError } from "./utils";
 
 const SWAP_FEE = 100n; // 1 % pool fee
 const SLIPPAGE_BPS = 100n; // 100 basis points = 1 %
@@ -73,8 +77,8 @@ const getAmountOut = (
 
 export const BuySell = ({
   tokenId,
-  name,
-  symbol,
+  name: propName,
+  symbol: propSymbol,
 }: {
   tokenId: bigint;
   name: string;
@@ -83,12 +87,39 @@ export const BuySell = ({
   const [tab, setTab] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [txHash, setTxHash] = useState<`0x${string}`>();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const { address, isConnected } = useAccount();
-  const { writeContractAsync, isPending, error } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const { switchChain } = useSwitchChain();
   const chainId = useChainId();
+  
+  // Fetch token metadata from blockchain
+  const { name, symbol, tokenUri } = useCoinMeta(tokenId);
+  
+  // Fetch metadata description from token URI
+  const { data: tokenData } = useQuery({
+    queryKey: ["token-metadata", tokenUri],
+    enabled: !!(
+      tokenUri &&
+      (tokenUri.startsWith("http") || tokenUri.startsWith("ipfs://"))
+    ),
+    queryFn: async () => {
+      let uri;
+      if (tokenUri.startsWith("ipfs")) {
+        uri = `https://content.wrappr.wtf/ipfs/${tokenUri.slice(7)}`;
+      } else if (tokenUri.startsWith("http")) {
+        uri = tokenUri;
+      } else {
+        throw new Error("Invalid token URI");
+      }
+
+      const response = await fetch(uri);
+      const data = await response.json();
+      return data;
+    },
+  });
 
   // fetch reserves
   const poolKey = computePoolKey(tokenId);
@@ -98,7 +129,7 @@ export const BuySell = ({
     abi: ZAAMAbi,
     functionName: "pools",
     args: [BigInt(poolId)],
-    chainId: 1,
+    chainId: mainnet.id,
     query: {
       enabled: !!poolId,
       select: ([r0, r1]) => ({ reserve0: r0, reserve1: r1 }),
@@ -109,7 +140,7 @@ export const BuySell = ({
     abi: CoinsAbi,
     functionName: "balanceOf",
     args: address ? [address, tokenId] : undefined,
-    chainId: 1,
+    chainId: mainnet.id,
   });
   // fetch allowance / operator state
   const { data: isOperator } = useReadContract({
@@ -117,7 +148,7 @@ export const BuySell = ({
     abi: CoinsAbi,
     functionName: "isOperator",
     args: address ? [address, ZAAMAddress] : undefined,
-    chainId: 1,
+    chainId: mainnet.id,
   });
 
   const nowSec = () => BigInt(Math.floor(Date.now() / 1000));
@@ -155,76 +186,141 @@ export const BuySell = ({
   // BUY using ETH → token
   const onBuy = async () => {
     if (!reserves || !address) return;
-    if (chainId !== mainnet.id) {
-      switchChain({ chainId: mainnet.id });
-    }
-    const amountInWei = parseEther(amount || "0");
-    const rawOut = getAmountOut(
-      amountInWei,
-      reserves.reserve0,
-      reserves.reserve1,
-      SWAP_FEE,
-    );
-    const amountOutMin = withSlippage(rawOut);
-    const deadline = nowSec() + BigInt(DEADLINE_SEC);
+    
+    // Clear any previous error message when starting a new transaction
+    setErrorMessage(null);
+    
+    try {
+      // Switch to mainnet if needed
+      if (chainId !== mainnet.id) {
+        await switchChain({ chainId: mainnet.id });
+      }
+      
+      const amountInWei = parseEther(amount || "0");
+      const rawOut = getAmountOut(
+        amountInWei,
+        reserves.reserve0,
+        reserves.reserve1,
+        SWAP_FEE,
+      );
+      const amountOutMin = withSlippage(rawOut);
+      const deadline = nowSec() + BigInt(DEADLINE_SEC);
 
-    const hash = await writeContractAsync({
-      address: ZAAMAddress,
-      abi: ZAAMAbi,
-      functionName: "swapExactIn",
-      args: [poolKey, amountInWei, amountOutMin, true, address, deadline],
-      value: amountInWei,
-      chainId: 1,
-    });
-    setTxHash(hash);
+      const hash = await writeContractAsync({
+        address: ZAAMAddress,
+        abi: ZAAMAbi,
+        functionName: "swapExactIn",
+        args: [poolKey, amountInWei, amountOutMin, true, address, deadline],
+        value: amountInWei,
+        chainId: mainnet.id,
+      });
+      setTxHash(hash);
+    } catch (err) {
+      // Use our utility to handle the error - only set error message for non-rejection errors
+      const errorMsg = handleWalletError(err);
+      if (errorMsg) {
+        setErrorMessage(errorMsg);
+      }
+    }
   };
 
   // SELL using token → ETH
   const onSell = async () => {
     if (!reserves || !address) return;
-    if (chainId !== mainnet.id) {
-      await switchChain({ chainId: mainnet.id });
-    }
-    const amountInUnits = parseUnits(amount || "0", 18);
+    
+    // Clear any previous error message when starting a new transaction
+    setErrorMessage(null);
+    
+    try {
+      // Switch to mainnet if needed
+      if (chainId !== mainnet.id) {
+        await switchChain({ chainId: mainnet.id });
+      }
+      
+      const amountInUnits = parseUnits(amount || "0", 18);
 
-    // ensure approval
-    if (!isOperator) {
-      await writeContractAsync({
-        address: CoinsAddress,
-        abi: CoinsAbi,
-        functionName: "setOperator",
-        args: [ZAAMAddress, true],
-        chainId: 1,
+      // ensure approval
+      if (!isOperator) {
+        try {
+          await writeContractAsync({
+            address: CoinsAddress,
+            abi: CoinsAbi,
+            functionName: "setOperator",
+            args: [ZAAMAddress, true],
+            chainId: mainnet.id,
+          });
+        } catch (approvalErr) {
+          // Handle approval error separately
+          const errorMsg = handleWalletError(approvalErr);
+          if (errorMsg) {
+            setErrorMessage(errorMsg);
+          }
+          // Exit early if there was an approval error
+          return;
+        }
+      }
+
+      const rawOut = getAmountOut(
+        amountInUnits,
+        reserves.reserve1,
+        reserves.reserve0,
+        SWAP_FEE,
+      );
+      const amountOutMin = withSlippage(rawOut);
+      const deadline = nowSec() + BigInt(DEADLINE_SEC);
+
+      const hash = await writeContractAsync({
+        address: ZAAMAddress,
+        abi: ZAAMAbi,
+        functionName: "swapExactIn",
+        args: [poolKey, amountInUnits, amountOutMin, false, address, deadline],
+        chainId: mainnet.id,
       });
+      setTxHash(hash);
+    } catch (err) {
+      // Use our utility to handle the error - only set error message for non-rejection errors
+      const errorMsg = handleWalletError(err);
+      if (errorMsg) {
+        setErrorMessage(errorMsg);
+      }
     }
-
-    const rawOut = getAmountOut(
-      amountInUnits,
-      reserves.reserve1,
-      reserves.reserve0,
-      SWAP_FEE,
-    );
-    const amountOutMin = withSlippage(rawOut);
-    const deadline = nowSec() + BigInt(DEADLINE_SEC);
-
-    const hash = await writeContractAsync({
-      address: ZAAMAddress,
-      abi: ZAAMAbi,
-      functionName: "swapExactIn",
-      args: [poolKey, amountInUnits, amountOutMin, false, address, deadline],
-      chainId: 1,
-    });
-    setTxHash(hash);
   };
 
+  // Use the name and symbol from blockchain if available, otherwise fall back to props
+  const displayName = name !== "N/A" ? name : propName;
+  const displaySymbol = symbol !== "N/A" ? symbol : propSymbol;
+  
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as "buy" | "sell")}>
+      <div className="flex items-start gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+        <div className="flex-shrink-0">
+          <div className="w-16 h-16">
+            <DisplayTokenUri tokenUri={tokenUri} symbol={displaySymbol} />
+          </div>
+        </div>
+        <div className="flex flex-col flex-grow overflow-hidden">
+          <div className="flex items-baseline space-x-2">
+            <h3 className="text-lg font-medium truncate">{displayName}</h3>
+            <span className="text-sm text-gray-500">[{displaySymbol}]</span>
+          </div>
+          {tokenData?.description ? (
+            <p className="text-sm text-gray-600 mt-1 overflow-y-auto max-h-20">
+              {tokenData.description}
+            </p>
+          ) : tokenUri !== "N/A" ? (
+            <p className="text-sm text-gray-400 italic mt-1">Loading metadata...</p>
+          ) : (
+            <p className="text-sm text-gray-400 italic mt-1">No description available</p>
+          )}
+        </div>
+      </div>
+      
       <TabsList>
         <TabsTrigger value="buy">
-          Buy {name} [{symbol}]
+          Buy {displayName} [{displaySymbol}]
         </TabsTrigger>
         <TabsTrigger value="sell">
-          Sell {name} [{symbol}]
+          Sell {displayName} [{displaySymbol}]
         </TabsTrigger>
       </TabsList>
 
@@ -240,25 +336,25 @@ export const BuySell = ({
             onChange={(e) => setAmount(e.currentTarget.value)}
           />
           <span className="text-sm">
-            You will receive ~ {estimated} {symbol}
+            You will receive ~ {estimated} {displaySymbol}
           </span>
           <Button
             onClick={onBuy}
             disabled={!isConnected || isPending || !amount}
             variant="default"
           >
-            {isPending ? "Buying…" : `Buy ${symbol}`}
+            {isPending ? "Buying…" : `Buy ${displaySymbol}`}
           </Button>
         </div>
       </TabsContent>
 
       <TabsContent value="sell">
         <div className="flex flex-col gap-2">
-          <span className="text-sm text-gray-600">Using {symbol}</span>
+          <span className="text-sm text-gray-600">Using {displaySymbol}</span>
           <div className="relative">
             <Input
               type="number"
-              placeholder={`Amount ${symbol}`}
+              placeholder={`Amount ${displaySymbol}`}
               value={amount}
               min="0"
               step="any"
@@ -288,12 +384,12 @@ export const BuySell = ({
             disabled={!isConnected || isPending || !amount}
             variant="outline"
           >
-            {isPending ? "Selling…" : `Sell ${symbol}`}
+            {isPending ? "Selling…" : `Sell ${displaySymbol}`}
           </Button>
         </div>
       </TabsContent>
 
-      {error && <p className="text-destructive text-sm">{error.message}</p>}
+      {errorMessage && <p className="text-destructive text-sm">{errorMessage}</p>}
       {isSuccess && <p className="text-green-600 text-sm">Tx confirmed!</p>}
     </Tabs>
   );

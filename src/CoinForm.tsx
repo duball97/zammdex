@@ -4,6 +4,7 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { useAccount, useWriteContract } from "wagmi";
 import { parseEther } from "viem";
 import { pinImageToPinata, pinJsonToPinata } from "./utils/pinata";
+import { handleWalletError, isUserRejectionError } from "./utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -163,13 +164,16 @@ export function CoinForm({
     setPoolSupply(TOTAL_SUPPLY - safeCreatorAmount);
   }, [formState.creatorSupply]);
 
-  const { writeContract, isPending, isSuccess, data } = useWriteContract();
+  const { writeContract, isPending, isSuccess, data, error } = useWriteContract();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setErrorMessage(null);
 
     if (!address || !imageBuffer) {
       console.error("Wallet not connected or image not uploaded");
+      setErrorMessage(!address ? "Wallet not connected" : "Please upload an image");
       return;
     }
 
@@ -196,34 +200,48 @@ export function CoinForm({
 
       const tokenUriHash = await pinJsonToPinata(tokenUriJson);
 
-      writeContract({
-        address: CoinchanAddress,
-        abi: CoinchanAbi,
-        functionName: "makeLocked",
-        value: parseEther("0.01"),
-        args: [
-          formState.name,
-          formState.symbol,
-          tokenUriHash,
-          parseEther(finalPoolSupply.toString()),
-          parseEther(safeCreatorSupply.toString()),
-          BigInt(swapFee),
-          address,
-          BigInt(Math.floor(Date.now() / 1000) + vestingDuration),
-          vesting,
-        ],
-      });
+      try {
+        writeContract({
+          address: CoinchanAddress,
+          abi: CoinchanAbi,
+          functionName: "makeLocked",
+          value: parseEther("0.01"),
+          args: [
+            formState.name,
+            formState.symbol,
+            tokenUriHash,
+            parseEther(finalPoolSupply.toString()),
+            parseEther(safeCreatorSupply.toString()),
+            BigInt(swapFee),
+            address,
+            BigInt(Math.floor(Date.now() / 1000) + vestingDuration),
+            vesting,
+          ],
+        });
 
-      confetti({
-        particleCount: 666,
-        spread: 666,
-        scalar: 0.9,
-        shapes: ["circle"],
-        gravity: 0.9,
-        colors: ["#f9bd20", "#c17a00", "#fff9e6"],
-      });
-    } catch (error) {
-      console.error("Error deploying coin:", error);
+        // Show confetti only if the transaction was successful
+        if (!isUserRejectionError(error)) {
+          confetti({
+            particleCount: 666,
+            spread: 666,
+            scalar: 0.9,
+            shapes: ["circle"],
+            gravity: 0.9,
+            colors: ["#f9bd20", "#c17a00", "#fff9e6"],
+          });
+        }
+      } catch (txError) {
+        // Handle wallet rejection silently
+        if (!isUserRejectionError(txError)) {
+          const errorMsg = handleWalletError(txError);
+          if (errorMsg) {
+            setErrorMessage(errorMsg);
+          }
+        }
+      }
+    } catch (pinataError) {
+      console.error("Error uploading to Pinata:", pinataError);
+      setErrorMessage("Failed to upload image to IPFS. Please try again.");
     }
   };
 
@@ -317,7 +335,11 @@ export function CoinForm({
             {isPending ? "Check Wallet" : "Coin It!"}
           </Button>
 
-          {isSuccess && <div>Transaction: {JSON.stringify(data)}</div>}
+          {errorMessage && (
+            <div className="text-sm text-red-600 mt-2">{errorMessage}</div>
+          )}
+          
+          {isSuccess && <div className="text-sm text-green-600 mt-2">Success! Transaction: {JSON.stringify(data)}</div>}
         </form>
       </div>
     </div>

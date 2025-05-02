@@ -3,9 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 export const DisplayTokenUri = ({
   tokenUri,
   symbol,
+  className = "",
 }: {
   tokenUri: string;
   symbol: string;
+  className?: string;
 }) => {
   const { data: tokenData } = useQuery({
     queryKey: ["token", tokenUri],
@@ -34,7 +36,7 @@ export const DisplayTokenUri = ({
     !(tokenUri.startsWith("http") || tokenUri.startsWith("ipfs://"))
   ) {
     return (
-      <div className="w-12 h-12 flex bg-red-500 text-white justify-center items-center rounded-full">
+      <div className={`w-full h-full flex bg-red-500 text-white justify-center items-center rounded-full ${className}`}>
         {symbol?.slice(0, 3)}
       </div>
     );
@@ -44,7 +46,7 @@ export const DisplayTokenUri = ({
     <img
       src={replaceIpfs(tokenData?.image)}
       alt={`${symbol} logo`}
-      className="w-12 h-12 rounded-full object-cover"
+      className={`w-full h-full rounded-full object-cover ${className}`}
     />
   );
 };
