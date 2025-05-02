@@ -9,7 +9,6 @@ import {
   useChainId,
 } from "wagmi";
 import { handleWalletError, isUserRejectionError } from "./utils";
-import { DisplayTokenUri } from "./DisplayTokenUri";
 import {
   parseEther,
   parseUnits,
@@ -562,10 +561,8 @@ export const SwapTile = () => {
   const [lpBurnAmount, setLpBurnAmount] = useState<string>("");
   
   // State for creating new pool
-  const [customTokenAddress, setCustomTokenAddress] = useState<string>("");
   const [customTokenId, setCustomTokenId] = useState<string>("");
   const [customSwapFee, setCustomSwapFee] = useState<string>("1.00");
-  const [isCreatingNewPool, setIsCreatingNewPool] = useState<boolean>(false);
   const [poolExists, setPoolExists] = useState<boolean | null>(null);
   
   // State for resolved coin information 
@@ -1239,7 +1236,6 @@ export const SwapTile = () => {
       
       // After creating the pool, set mode back to regular add liquidity
       setLiquidityMode("add");
-      setIsCreatingNewPool(false);
       
     } catch (err) {
       // Handle specific error types but ignore user rejections
@@ -1948,7 +1944,7 @@ export const SwapTile = () => {
                   </div>
                 ) : (
                   <TokenSelector
-                    selectedToken={buyToken}
+                    selectedToken={buyToken || tokens[0]} /* Ensure we always have a valid token */
                     tokens={tokens}
                     onSelect={handleBuyTokenSelect}
                   />
