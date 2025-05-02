@@ -7,7 +7,6 @@ import {
   usePublicClient,
   useSwitchChain,
   useChainId,
-  useReadContract,
   useBalance,
 } from "wagmi";
 import { handleWalletError, isUserRejectionError } from "./utils";
@@ -452,12 +451,6 @@ const useAllTokens = () => {
 /* ────────────────────────────────────────────────────────────────────────────
   ENHANCED TOKEN SELECTOR: With thumbnail display
 ──────────────────────────────────────────────────────────────────────────── */
-// UserToken with balance information
-interface UserToken extends TokenMeta {
-  userBalance?: bigint;
-}
-
-// Token selector component with user balances
 const TokenSelector = ({
   selectedToken,
   tokens,
@@ -624,7 +617,9 @@ export const SwapTile = () => {
   const { data: ethBalance } = useBalance({
     address: userAddress,
     chainId: mainnet.id,
-    enabled: !!userAddress,
+    query: {
+      enabled: !!userAddress,
+    }
   });
   
   // Debug info
@@ -656,7 +651,6 @@ export const SwapTile = () => {
                 abi: CoinsAbi,
                 functionName: "balanceOf",
                 args: [userAddress, token.id!],
-                chainId: mainnet.id,
               }) as bigint;
               
               return { id: token.id!.toString(), balance };
