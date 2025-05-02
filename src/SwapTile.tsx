@@ -26,7 +26,7 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowDownUp, Plus, Minus } from "lucide-react";
+import { Loader2, ArrowDownUp, Plus } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -1902,18 +1902,16 @@ export const SwapTile = () => {
           </div>
           
           {/* FLIP/PLUS/MINUS button */}
-          {/* Hide the button in create pool mode, show it in other modes */}
-          {!(mode === "liquidity" && liquidityMode === "create") && (
+          {/* Hide the button in create pool mode and remove liquidity mode, show it in other modes */}
+          {!(mode === "liquidity" && (liquidityMode === "create" || liquidityMode === "remove")) && (
             <button
               className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 active:scale-95 transition-all z-10"
-              onClick={mode === "swap" ? flipTokens : () => setLiquidityMode(liquidityMode === "add" ? "remove" : "add")}
+              onClick={mode === "swap" ? flipTokens : () => setLiquidityMode("remove")}
             >
               {mode === "swap" ? (
                 <ArrowDownUp className="h-4 w-4 text-white" />
-              ) : liquidityMode === "add" ? (
-                <Plus className="h-4 w-4 text-white" />
               ) : (
-                <Minus className="h-4 w-4 text-white" />
+                <Plus className="h-4 w-4 text-white" />
               )}
             </button>
           )}
@@ -2087,9 +2085,9 @@ export const SwapTile = () => {
           }
         </Button>
 
-        {/* Error handling */}
-        {(writeError || txError) && (
-          <div className="text-sm text-red-600 mt-2">{writeError?.message || txError}</div>
+        {/* Error handling - only show non-user rejection errors */}
+        {((writeError && !isUserRejectionError(writeError)) || txError) && (
+          <div className="text-sm text-red-600 mt-2">{(writeError && !isUserRejectionError(writeError)) ? writeError.message : txError}</div>
         )}
         
         {/* Success message */}
