@@ -7,6 +7,8 @@ import {
   usePublicClient,
   useSwitchChain,
   useChainId,
+  useReadContract,
+  useBalance,
 } from "wagmi";
 import { handleWalletError, isUserRejectionError } from "./utils";
 import {
@@ -450,14 +452,22 @@ const useAllTokens = () => {
 /* ────────────────────────────────────────────────────────────────────────────
   ENHANCED TOKEN SELECTOR: With thumbnail display
 ──────────────────────────────────────────────────────────────────────────── */
+// UserToken with balance information
+interface UserToken extends TokenMeta {
+  userBalance?: bigint;
+}
+
+// Token selector component with user balances
 const TokenSelector = ({
   selectedToken,
   tokens,
   onSelect,
+  userBalances,
 }: {
   selectedToken: TokenMeta;
   tokens: TokenMeta[];
   onSelect: (token: TokenMeta) => void;
+  userBalances: Record<string, bigint>; // Keyed by token ID
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectedValue = selectedToken.id?.toString() ?? "eth";
@@ -468,25 +478,46 @@ const TokenSelector = ({
     setIsOpen(false);
   };
   
-  // TokenImage already moved to top level of file
+  // Format balance for display
+  const formatBalance = (token: TokenMeta): string | null => {
+    // For ETH (token.id === null)
+    if (token.id === null) {
+      const ethBalance = userBalances["eth"];
+      return ethBalance ? formatEther(ethBalance).substring(0, 7) : null;
+    } 
+    // For ERC tokens
+    else {
+      const tokenId = token.id.toString();
+      const balance = userBalances[tokenId];
+      return balance ? formatUnits(balance, 18).substring(0, 7) : null;
+    }
+  };
   
-  // Using imported TokenImage component
+  // Get balance for selected token
+  const selectedTokenBalance = formatBalance(selectedToken);
   
   return (
     <div className="relative">
-      {/* Selected token display with thumbnail */}
+      {/* Selected token display with thumbnail and balance */}
       <div 
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50"
       >
         <TokenImage token={selectedToken} />
-        <span className="font-medium">{selectedToken.symbol}</span>
+        <div className="flex flex-col">
+          <span className="font-medium">{selectedToken.symbol}</span>
+          {selectedTokenBalance && (
+            <span className="text-xs text-gray-500">
+              Balance: {selectedTokenBalance}
+            </span>
+          )}
+        </div>
         <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
         </svg>
       </div>
       
-      {/* Dropdown list with thumbnails */}
+      {/* Dropdown list with thumbnails and balances */}
       {isOpen && (
         <div className="absolute z-20 mt-1 w-64 max-h-96 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
           {tokens.map((token) => {
@@ -517,6 +548,7 @@ const TokenSelector = ({
             };
             
             const reserves = formatReserves(token);
+            const tokenBalance = formatBalance(token);
             
             return (
               <div 
@@ -529,9 +561,14 @@ const TokenSelector = ({
                 <TokenImage token={token} />
                 <div className="flex flex-col">
                   <span className="font-medium">{token.symbol}</span>
-                  {reserves && (
-                    <span className="text-xs text-gray-500">{reserves}</span>
-                  )}
+                  <div className="text-xs">
+                    {tokenBalance && (
+                      <span className="text-gray-600">Balance: {tokenBalance}</span>
+                    )}
+                    {reserves && (
+                      <span className="text-gray-500 ml-1">{tokenBalance ? '•' : ''} {reserves}</span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -574,11 +611,80 @@ export const SwapTile = () => {
   } | null>(null);
   const [isResolvingCoin, setIsResolvingCoin] = useState<boolean>(false);
   
+  // User token balances
+  const [userBalances, setUserBalances] = useState<Record<string, bigint>>({});
+  
   // Get the public client for contract interactions
   const publicClient = usePublicClient({ chainId: mainnet.id });
   
+  // Get account for balance fetching
+  const { address: userAddress } = useAccount();
+  
+  // Fetch ETH balance
+  const { data: ethBalance } = useBalance({
+    address: userAddress,
+    chainId: mainnet.id,
+    enabled: !!userAddress,
+  });
+  
   // Debug info
   const tokenCount = tokens.length;
+  
+  // Update ETH balance whenever it changes
+  useEffect(() => {
+    if (ethBalance) {
+      setUserBalances(prev => ({
+        ...prev,
+        eth: ethBalance.value
+      }));
+    }
+  }, [ethBalance]);
+  
+  // Fetch token balances for all loaded tokens
+  useEffect(() => {
+    if (!userAddress || !publicClient || tokens.length <= 1) return;
+    
+    const fetchTokenBalances = async () => {
+      try {
+        // Create a batch of balance fetch promises for all loaded tokens
+        const balancePromises = tokens
+          .filter(token => token.id !== null) // Skip ETH token, handled separately
+          .map(async (token) => {
+            try {
+              const balance = await publicClient.readContract({
+                address: CoinsAddress,
+                abi: CoinsAbi,
+                functionName: "balanceOf",
+                args: [userAddress, token.id!],
+                chainId: mainnet.id,
+              }) as bigint;
+              
+              return { id: token.id!.toString(), balance };
+            } catch (err) {
+              console.error(`Failed to fetch balance for token ${token.id}:`, err);
+              return { id: token.id!.toString(), balance: 0n };
+            }
+          });
+        
+        // Process the results
+        const results = await Promise.all(balancePromises);
+        
+        // Convert to user balances record
+        const newBalances: Record<string, bigint> = { ...userBalances };
+        
+        results.forEach(({ id, balance }) => {
+          newBalances[id] = balance;
+        });
+        
+        // Update user balances
+        setUserBalances(newBalances);
+      } catch (err) {
+        console.error("Error fetching token balances:", err);
+      }
+    };
+    
+    fetchTokenBalances();
+  }, [userAddress, publicClient, tokens]);
   
   // Set initial buyToken once tokens are loaded
   useEffect(() => {
@@ -639,7 +745,9 @@ export const SwapTile = () => {
   const { address, isConnected } = useAccount();
   const { writeContractAsync, isPending, error: writeError } = useWriteContract();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
-  const { switchChain } = useSwitchChain();
+  // Using switchChainAsync instead of switchChain, and removed chainId param from transactions
+  // This fixes "connection.connector.getChainId is not a function" errors with newer Wagmi versions
+  const { switchChainAsync } = useSwitchChain();
   const chainId = useChainId();
   
   /* Calculate pool reserves */
@@ -1054,7 +1162,7 @@ export const SwapTile = () => {
       // Switch to mainnet if needed
       if (chainId !== mainnet.id) {
         try {
-          await switchChain({ chainId: mainnet.id });
+          await switchChainAsync({ chainId: mainnet.id });
         } catch (err) {
           // Only set error if it's not a user rejection
           if (!isUserRejectionError(err)) {
@@ -1088,7 +1196,6 @@ export const SwapTile = () => {
           address,
           deadline,
         ],
-        chainId: mainnet.id,
       });
       
       setTxHash(hash);
@@ -1158,7 +1265,7 @@ export const SwapTile = () => {
       // Switch to mainnet if needed
       if (chainId !== mainnet.id) {
         try {
-          await switchChain({ chainId: mainnet.id });
+          await switchChainAsync({ chainId: mainnet.id });
         } catch (err) {
           // Only set error if it's not a user rejection
           if (!isUserRejectionError(err)) {
@@ -1197,7 +1304,6 @@ export const SwapTile = () => {
             abi: CoinsAbi,
             functionName: "setOperator",
             args: [ZAAMAddress, true],
-            chainId: mainnet.id,
           });
           setIsOperator(true);
         } catch (err) {
@@ -1229,7 +1335,6 @@ export const SwapTile = () => {
           deadline,
         ],
         value: ethAmount,
-        chainId: mainnet.id,
       });
       
       setTxHash(hash);
@@ -1285,7 +1390,7 @@ export const SwapTile = () => {
       // Switch to mainnet if needed
       if (chainId !== mainnet.id) {
         try {
-          await switchChain({ chainId: mainnet.id });
+          await switchChainAsync({ chainId: mainnet.id });
         } catch (err) {
           // Only set error if it's not a user rejection
           if (!isUserRejectionError(err)) {
@@ -1331,7 +1436,6 @@ export const SwapTile = () => {
             abi: CoinsAbi,
             functionName: "setOperator",
             args: [ZAAMAddress, true],
-            chainId: mainnet.id,
           });
           setIsOperator(true);
         } catch (err) {
@@ -1397,7 +1501,6 @@ export const SwapTile = () => {
             deadline,
           ],
           value: ethAmount, // Use the exact ETH amount calculated by ZAMMHelper
-          chainId: mainnet.id,
         });
         
         setTxHash(hash);
@@ -1445,7 +1548,7 @@ export const SwapTile = () => {
       // Switch to mainnet if needed
       if (chainId !== mainnet.id) {
         try {
-          await switchChain({ chainId: mainnet.id });
+          await switchChainAsync({ chainId: mainnet.id });
         } catch (err) {
           // Only set error if it's not a user rejection
           if (!isUserRejectionError(err)) {
@@ -1485,7 +1588,6 @@ export const SwapTile = () => {
             nowSec() + BigInt(DEADLINE_SEC),
           ],
           value: amountInWei,
-          chainId: mainnet.id,
         });
         setTxHash(hash);
       } else {
@@ -1499,7 +1601,6 @@ export const SwapTile = () => {
               abi: CoinsAbi,
               functionName: "setOperator",
               args: [ZAAMAddress, true],
-              chainId: mainnet.id,
             });
             setIsOperator(true);
           } catch (err) {
@@ -1574,7 +1675,6 @@ export const SwapTile = () => {
               abi: ZAAMAbi,
               functionName: "multicall",
               args: [multicallData],
-              chainId: mainnet.id,
             });
             
             console.log(`Transaction hash: ${hash}`);
@@ -1616,7 +1716,6 @@ export const SwapTile = () => {
             address,
             nowSec() + BigInt(DEADLINE_SEC),
           ],
-          chainId: mainnet.id,
         });
         setTxHash(hash);
       }
@@ -1881,6 +1980,7 @@ export const SwapTile = () => {
                   selectedToken={sellToken}
                   tokens={tokens}
                   onSelect={handleSellTokenSelect}
+                  userBalances={userBalances}
                 />
               )}
             </div>
@@ -1934,10 +2034,13 @@ export const SwapTile = () => {
                     </div>
                     <div className="flex flex-col">
                       <span className="font-medium">{resolvedCoin.symbol}</span>
-                      <span className="text-xs text-gray-500">{resolvedCoin.name.length > 15 ? 
-                        resolvedCoin.name.slice(0, 15) + '...' :
-                        resolvedCoin.name}
-                      </span>
+                      <span className="text-xs text-gray-500">{
+                        userAddress && userBalances[resolvedCoin.id.toString()] ?
+                          `Balance: ${formatUnits(userBalances[resolvedCoin.id.toString()], 18).substring(0, 7)}` :
+                          resolvedCoin.name.length > 15 ? 
+                            resolvedCoin.name.slice(0, 15) + '...' :
+                            resolvedCoin.name
+                      }</span>
                     </div>
                   </div>
                 ) : (
@@ -1945,6 +2048,7 @@ export const SwapTile = () => {
                     selectedToken={buyToken || tokens[0]} /* Ensure we always have a valid token */
                     tokens={tokens}
                     onSelect={handleBuyTokenSelect}
+                    userBalances={userBalances}
                   />
                 )}
               </div>
