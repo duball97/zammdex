@@ -26,7 +26,7 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowDownUp, Plus, Minus } from "lucide-react";
+import { Loader2, ArrowDownUp, Plus } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
