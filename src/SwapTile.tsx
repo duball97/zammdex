@@ -906,8 +906,9 @@ export const SwapTile = () => {
         try {
           await switchChain({ chainId: mainnet.id });
         } catch (err) {
-          // Only set error if it's not a user rejection
-          if (!isUserRejectionError(err)) {
+          // Use our utility to handle wallet errors
+          const errorMsg = handleWalletError(err);
+          if (errorMsg) {
             console.error("Failed to switch to Ethereum mainnet:", err);
             setTxError("Failed to switch to Ethereum mainnet");
           }
@@ -943,9 +944,10 @@ export const SwapTile = () => {
       
       setTxHash(hash);
     } catch (err) {
-      // Use our utility to handle errors, only show non-rejection errors
+      // Use our utility to handle wallet errors
       const errorMsg = handleWalletError(err);
       if (errorMsg) {
+        console.error("Remove liquidity execution error:", err);
         setTxError(errorMsg);
       }
     }
@@ -976,8 +978,9 @@ export const SwapTile = () => {
         try {
           await switchChain({ chainId: mainnet.id });
         } catch (err) {
-          // Only set error if it's not a user rejection
-          if (!isUserRejectionError(err)) {
+          // Use our utility to handle wallet errors
+          const errorMsg = handleWalletError(err);
+          if (errorMsg) {
             console.error("Failed to switch to Ethereum mainnet:", err);
             setTxError("Failed to switch to Ethereum mainnet");
           }
@@ -1024,12 +1027,12 @@ export const SwapTile = () => {
           });
           setIsOperator(true);
         } catch (err) {
-          // Handle user rejection silently
-          if (isUserRejectionError(err)) {
-            return;
+          // Use our utility to handle wallet errors
+          const errorMsg = handleWalletError(err);
+          if (errorMsg) {
+            console.error("Failed to approve operator:", err);
+            setTxError("Failed to approve the liquidity contract as operator");
           }
-          console.error("Failed to approve operator:", err);
-          setTxError("Failed to approve the liquidity contract as operator");
           return;
         }
       }
@@ -1091,37 +1094,37 @@ export const SwapTile = () => {
         
         setTxHash(hash);
       } catch (calcErr) {
-        // Check if this is a user rejection
-        if (isUserRejectionError(calcErr)) {
-          return;
+        // Use our utility to handle wallet errors
+        const errorMsg = handleWalletError(calcErr);
+        if (errorMsg) {
+          console.error("Error calling ZAMMHelper.calculateRequiredETH:", calcErr);
+          setTxError("Failed to calculate exact ETH amount");
         }
-        console.error("Error calling ZAMMHelper.calculateRequiredETH:", calcErr);
-        setTxError("Failed to calculate exact ETH amount");
         return;
       }
     } catch (err) {
-      // Handle specific error types but ignore user rejections
-      if (isUserRejectionError(err)) {
-        return;
-      }
-      
-      console.error("Add liquidity execution error:", err);
-      
-      // More specific error messages based on error type
-      if (err instanceof Error) {
-        console.log("Error details:", err);
+      // Handle errors, but don't display errors for user rejections
+      // Use our utility to properly handle wallet errors
+      const errorMsg = handleWalletError(err);
+      if (errorMsg) {
+        console.error("Add liquidity execution error:", err);
         
-        if (err.message.includes("insufficient funds")) {
-          setTxError("Insufficient funds for this transaction");
-        } else if (err.message.includes("InvalidMsgVal")) {
-          // This is our critical error where the msg.value doesn't match what the contract expects
-          setTxError("Contract rejected ETH value. Please try again with different amounts.");
-          console.error("ZAMM contract rejected the ETH value due to strict msg.value validation.");
+        // More specific error messages based on error type
+        if (err instanceof Error) {
+          console.log("Error details:", err);
+          
+          if (err.message.includes("insufficient funds")) {
+            setTxError("Insufficient funds for this transaction");
+          } else if (err.message.includes("InvalidMsgVal")) {
+            // This is our critical error where the msg.value doesn't match what the contract expects
+            setTxError("Contract rejected ETH value. Please try again with different amounts.");
+            console.error("ZAMM contract rejected the ETH value due to strict msg.value validation.");
+          } else {
+            setTxError("Transaction failed. Please try again.");
+          }
         } else {
-          setTxError("Transaction failed. Please try again.");
+          setTxError("Unknown error during liquidity provision");
         }
-      } else {
-        setTxError("Unknown error during liquidity provision");
       }
     }
   };
@@ -1136,8 +1139,9 @@ export const SwapTile = () => {
         try {
           await switchChain({ chainId: mainnet.id });
         } catch (err) {
-          // Only set error if it's not a user rejection
-          if (!isUserRejectionError(err)) {
+          // Use our utility to handle wallet errors
+          const errorMsg = handleWalletError(err);
+          if (errorMsg) {
             console.error("Failed to switch to Ethereum mainnet:", err);
             setTxError("Failed to switch to Ethereum mainnet");
           }
@@ -1192,12 +1196,12 @@ export const SwapTile = () => {
             });
             setIsOperator(true);
           } catch (err) {
-            // Handle user rejection silently
-            if (isUserRejectionError(err)) {
-              return;
+            // Use our utility to handle wallet errors
+            const errorMsg = handleWalletError(err);
+            if (errorMsg) {
+              console.error("Failed to approve operator:", err);
+              setTxError("Failed to approve the swap contract as operator");
             }
-            console.error("Failed to approve operator:", err);
-            setTxError("Failed to approve the swap contract as operator");
             return;
           }
         }
@@ -1270,12 +1274,12 @@ export const SwapTile = () => {
             setTxHash(hash);
             return;
           } catch (err) {
-            // Handle user rejection silently
-            if (isUserRejectionError(err)) {
-              return;
+            // Use our utility to handle wallet errors
+            const errorMsg = handleWalletError(err);
+            if (errorMsg) {
+              console.error("Error in multicall swap:", err);
+              setTxError("Failed to execute coin-to-coin swap");
             }
-            console.error("Error in multicall swap:", err);
-            setTxError("Failed to execute coin-to-coin swap");
             return;
           }
         }
@@ -1310,12 +1314,12 @@ export const SwapTile = () => {
         setTxHash(hash);
       }
     } catch (err) {
-      // Handle user rejection silently
-      if (isUserRejectionError(err)) {
-        return;
+      // Use our utility to handle wallet errors
+      const errorMsg = handleWalletError(err);
+      if (errorMsg) {
+        console.error("Swap execution error:", err);
+        setTxError(errorMsg);
       }
-      console.error("Swap execution error:", err);
-      setTxError("Transaction failed. Please try again.");
     }
   };
 
@@ -1559,8 +1563,11 @@ export const SwapTile = () => {
         </Button>
 
         {/* Error handling */}
-        {(writeError || txError) && (
-          <div className="text-sm text-red-600 mt-2">{writeError?.message || txError}</div>
+        {/* Only show error if it's not a user rejection */}
+        {((writeError && !isUserRejectionError(writeError)) || txError) && (
+          <div className="text-sm text-red-600 mt-2">{
+            writeError && !isUserRejectionError(writeError) ? writeError.message : txError
+          }</div>
         )}
         
         {/* Success message */}
