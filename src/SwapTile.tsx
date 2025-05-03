@@ -129,18 +129,29 @@ const useAllTokens = () => {
   const [error, setError] = useState<string | null>(null);
   
   // Get ETH balance using wagmi hook with optimized settings
-  const { data: ethBalance, isSuccess: ethBalanceSuccess, refetch: refetchEthBalance } = useBalance({
+  const { data: ethBalance, isSuccess: ethBalanceSuccess, refetch: refetchEthBalance, isFetching: isEthBalanceFetching } = useBalance({
     address,
     chainId: mainnet.id,
     scopeKey: 'ethBalance', // Unique key for this balance query
   });
   
-  // Refetch ETH balance when component mounts and when the chain changes
+  // Set up polling for ETH balance
   useEffect(() => {
-    if (address) {
-      console.log("Manually triggering ETH balance refetch");
+    if (!address) return;
+    
+    console.log("Setting up ETH balance polling");
+    
+    // Immediately fetch on mount or when address changes
+    refetchEthBalance();
+    
+    // Set up polling interval (every 10 seconds)
+    const interval = setInterval(() => {
+      console.log("Polling ETH balance...");
       refetchEthBalance();
-    }
+    }, 10000);
+    
+    // Clean up interval on unmount
+    return () => clearInterval(interval);
   }, [address, refetchEthBalance]);
   
   // Log ETH balance status for debugging
@@ -152,32 +163,74 @@ const useAllTokens = () => {
     });
   }, [address, ethBalance, ethBalanceSuccess]);
 
-  // Update ETH balance in our token list when it changes
+  // More robust ETH balance handling
   useEffect(() => {
+    // Create a detailed log for debugging
+    console.log(`ETH Balance State: ${ethBalance ? formatEther(ethBalance.value) : 'undefined'} ETH, ` +
+      `Success: ${ethBalanceSuccess}, ` + 
+      `Fetching: ${isEthBalanceFetching}, ` +
+      `Has Address: ${!!address}`);
+    
+    // Determine the balance value to use, with persistent state
+    const effectiveBalance = ethBalance ? ethBalance.value : 
+                            (address ? undefined : 0n); // Only reset to 0 if no address
+    
+    // Create ETH token with proper balance
+    const ethTokenWithBalance = {
+      ...ETH_TOKEN,
+      // Three cases:
+      // 1. We have a balance from the API - use it
+      // 2. User is connected but balance not loaded yet - keep current balance (undefined)
+      // 3. No wallet connected - use 0n
+      balance: effectiveBalance
+    };
+    
     if (ethBalance) {
       console.log(`ETH Balance available: ${formatEther(ethBalance.value)} ETH`);
       
-      // Create a new ETH token object with the balance
-      const ethTokenWithBalance = {
-        ...ETH_TOKEN,
-        balance: ethBalance.value
-      };
-      
-      // Update the tokens array, replacing the ETH token
-      setTokens(prevTokens => {
-        // If we only have the ETH token, just update it
-        if (prevTokens.length === 1 && prevTokens[0].id === null) {
-          return [ethTokenWithBalance];
+      // Cache the ETH balance in localStorage for persistent display
+      try {
+        localStorage.setItem('ethBalance', ethBalance.value.toString());
+        console.log('ETH balance cached in localStorage');
+      } catch (err) {
+        console.error('Failed to cache ETH balance:', err);
+      }
+    } else if (address && !isEthBalanceFetching) {
+      // If wallet is connected but balance not available yet, try to load from cache
+      try {
+        const cachedBalance = localStorage.getItem('ethBalance');
+        if (cachedBalance) {
+          console.log(`Using cached ETH balance: ${formatEther(BigInt(cachedBalance))} ETH`);
+          ethTokenWithBalance.balance = BigInt(cachedBalance);
         }
-        
-        // Otherwise, replace the ETH token while keeping the other tokens
-        return [
-          ethTokenWithBalance,
-          ...prevTokens.filter(token => token.id !== null)
-        ];
-      });
+      } catch (err) {
+        console.error('Failed to load cached ETH balance:', err);
+      }
     }
-  }, [ethBalance]);
+    
+    // Always update the ETH token in our list
+    setTokens(prevTokens => {
+      // If we already have tokens with a real ETH token that has balance, be careful about overwriting
+      const existingEthToken = prevTokens.find(token => token.id === null);
+      
+      // Special case: we're trying to set undefined balance, but we already have a real balance
+      if (ethTokenWithBalance.balance === undefined && existingEthToken?.balance && existingEthToken.balance > 0n) {
+        console.log('Preserving existing ETH balance during refresh');
+        ethTokenWithBalance.balance = existingEthToken.balance;
+      }
+      
+      // If we don't have any tokens yet or only ETH, replace the whole array
+      if (prevTokens.length === 0 || (prevTokens.length === 1 && prevTokens[0].id === null)) {
+        return [ethTokenWithBalance];
+      }
+      
+      // Otherwise replace ETH token while keeping others
+      return [
+        ethTokenWithBalance,
+        ...prevTokens.filter(token => token.id !== null)
+      ];
+    });
+  }, [ethBalance, ethBalanceSuccess, isEthBalanceFetching, address]);
 
   useEffect(() => {
     const fetchTokens = async () => {
@@ -407,7 +460,7 @@ const useAllTokens = () => {
     fetchTokens();
   }, [publicClient, address]);
 
-  return { tokens, loading, error };
+  return { tokens, loading, error, isEthBalanceFetching };
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -417,10 +470,12 @@ const TokenSelector = ({
   selectedToken,
   tokens,
   onSelect,
+  isEthBalanceFetching = false,
 }: {
   selectedToken: TokenMeta;
   tokens: TokenMeta[];
   onSelect: (token: TokenMeta) => void;
+  isEthBalanceFetching?: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectedValue = selectedToken.id?.toString() ?? "eth";
@@ -433,39 +488,60 @@ const TokenSelector = ({
   
   // Helper functions for formatting and display
   
-  // Format token balance for display
+  // Enhanced format token balance function with special handling for ETH
   const formatBalance = (token: TokenMeta) => {
-    if (token.balance === undefined) return '';
+    if (token.balance === undefined) {
+      // For ETH specifically, always show 0 rather than blank
+      return token.id === null ? '0' : '';
+    }
+    
     if (token.balance === 0n) return '0';
     
     try {
-      // Convert balance to a number for display formatting
-      const balanceValue = token.id === null 
-        ? Number(formatEther(token.balance)) 
-        : Number(formatUnits(token.balance, 18));
-      
-      // Format based on size
-      if (balanceValue >= 1000) {
-        return `${Math.floor(balanceValue).toLocaleString()}`;
-      } else if (balanceValue >= 1) {
-        return balanceValue.toFixed(3); // Show 3 decimals for values ≥ 1
-      } else if (balanceValue >= 0.001) {
-        return balanceValue.toFixed(4); // Show 4 decimals for smaller values
-      } else if (balanceValue >= 0.0001) {
-        return balanceValue.toFixed(6); // Show more precision for tiny values
-      } else if (balanceValue > 0) {
-        // For ETH (reserve asset), always show a readable value even for tiny amounts
-        if (token.id === null) {
-          // For extremely small ETH amounts (< 0.0001), show with 8 decimals max
-          return balanceValue.toFixed(8);
+      // Special case for ETH
+      if (token.id === null) {
+        // Convert ETH balance to string first for precise formatting
+        const ethBalanceStr = formatEther(token.balance);
+        const ethValue = Number(ethBalanceStr);
+        
+        if (ethValue === 0) return '0'; // If somehow zero after conversion
+        
+        // Display ETH with appropriate precision based on size
+        if (ethValue >= 1000) {
+          return `${Math.floor(ethValue).toLocaleString()}`;
+        } else if (ethValue >= 1) {
+          return ethValue.toFixed(4); // Show 4 decimals for values ≥ 1
+        } else if (ethValue >= 0.001) {
+          return ethValue.toFixed(6); // Show 6 decimals for medium values
+        } else if (ethValue >= 0.0000001) {
+          // For very small values, use 8 decimals (typical for ETH)
+          return ethValue.toFixed(8);
+        } else {
+          // For extremely small values, use readable scientific notation
+          const scientificNotation = ethValue.toExponential(4);
+          return scientificNotation;
         }
-        // For non-ETH tokens, use scientific notation for extremely small amounts
-        return balanceValue.toExponential(2);
+      } 
+      
+      // For regular tokens
+      const tokenValue = Number(formatUnits(token.balance, 18));
+      
+      if (tokenValue >= 1000) {
+        return `${Math.floor(tokenValue).toLocaleString()}`;
+      } else if (tokenValue >= 1) {
+        return tokenValue.toFixed(3); // 3 decimals for ≥ 1
+      } else if (tokenValue >= 0.001) {
+        return tokenValue.toFixed(4); // 4 decimals for smaller values
+      } else if (tokenValue >= 0.0001) {
+        return tokenValue.toFixed(6); // 6 decimals for tiny values
+      } else if (tokenValue > 0) {
+        return tokenValue.toExponential(2); // Scientific notation for extremely small
       }
+      
       return '0';
     } catch (error) {
       console.error('Error formatting balance:', error);
-      return '0';
+      return token.id === null ? '0' : ''; // Always return 0 for ETH on error
     }
   };
   
@@ -604,7 +680,9 @@ const TokenSelector = ({
           </div>
           <div className="flex items-center gap-1">
             <span className="text-xs font-medium text-gray-700">
-              {selectedToken.balance !== undefined ? formatBalance(selectedToken) : ''}
+              {formatBalance(selectedToken)}
+              {selectedToken.id === null && isEthBalanceFetching && 
+                <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
             </span>
           </div>
         </div>
@@ -673,7 +751,9 @@ const TokenSelector = ({
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-medium">
-                    {balance || ''}
+                    {balance}
+                    {token.id === null && isEthBalanceFetching && 
+                      <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
                   </span>
                 </div>
               </div>
@@ -695,7 +775,7 @@ type LiquidityMode = "add" | "remove";
   SwapTile main component
 ──────────────────────────────────────────────────────────────────────────── */
 export const SwapTile = () => {
-  const { tokens, loading, error: loadError } = useAllTokens();
+  const { tokens, loading, error: loadError, isEthBalanceFetching } = useAllTokens();
   const [sellToken, setSellToken] = useState<TokenMeta>(ETH_TOKEN);
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
   const [mode, setMode] = useState<TileMode>("swap");
@@ -720,21 +800,69 @@ export const SwapTile = () => {
     }
   }, [tokens, buyToken]);
 
-  // Simple hook to keep ETH token state in sync
+  // Enhanced hook to keep ETH token state in sync with refresh-resistant behavior
   useEffect(() => {
     if (tokens.length === 0) return;
     
     const updatedEthToken = tokens.find(token => token.id === null);
     if (!updatedEthToken) return;
     
-    // Update sellToken if it's ETH
+    // Update sellToken if it's ETH, preserving balance whenever possible
     if (sellToken.id === null) {
-      setSellToken(updatedEthToken);
+      // Only update if the balance has changed from non-zero to different non-zero
+      // or from zero/undefined to a real value
+      const shouldUpdate = 
+        (updatedEthToken.balance && updatedEthToken.balance > 0n && 
+         (!sellToken.balance || sellToken.balance === 0n || updatedEthToken.balance !== sellToken.balance)) || 
+        // Or if the updated token has no balance but we previously had one, keep the old one
+        ((!updatedEthToken.balance || updatedEthToken.balance === 0n) && 
+         sellToken.balance && sellToken.balance > 0n);
+      
+      if (shouldUpdate) {
+        console.log(`Updating sellToken ETH balance from ${
+          sellToken.balance ? formatEther(sellToken.balance) : 'undefined'
+        } to ${
+          updatedEthToken.balance ? formatEther(updatedEthToken.balance) : 'undefined'
+        }`);
+        
+        // If the updated token has no balance but we already have one, merge them
+        if ((!updatedEthToken.balance || updatedEthToken.balance === 0n) && 
+            sellToken.balance && sellToken.balance > 0n) {
+          setSellToken({
+            ...updatedEthToken,
+            balance: sellToken.balance
+          });
+        } else {
+          setSellToken(updatedEthToken);
+        }
+      }
     }
     
-    // Update buyToken if it's ETH
+    // Update buyToken if it's ETH with similar logic
     if (buyToken && buyToken.id === null) {
-      setBuyToken(updatedEthToken);
+      const shouldUpdate = 
+        (updatedEthToken.balance && updatedEthToken.balance > 0n && 
+         (!buyToken.balance || buyToken.balance === 0n || updatedEthToken.balance !== buyToken.balance)) ||
+        ((!updatedEthToken.balance || updatedEthToken.balance === 0n) && 
+         buyToken.balance && buyToken.balance > 0n);
+      
+      if (shouldUpdate) {
+        console.log(`Updating buyToken ETH balance from ${
+          buyToken.balance ? formatEther(buyToken.balance) : 'undefined'
+        } to ${
+          updatedEthToken.balance ? formatEther(updatedEthToken.balance) : 'undefined'
+        }`);
+        
+        if ((!updatedEthToken.balance || updatedEthToken.balance === 0n) && 
+            buyToken.balance && buyToken.balance > 0n) {
+          setBuyToken({
+            ...updatedEthToken,
+            balance: buyToken.balance
+          });
+        } else {
+          setBuyToken(updatedEthToken);
+        }
+      }
     }
   }, [tokens]);
 
@@ -1612,6 +1740,7 @@ export const SwapTile = () => {
                 selectedToken={sellToken}
                 tokens={tokens}
                 onSelect={handleSellTokenSelect}
+                isEthBalanceFetching={isEthBalanceFetching}
               />
             </div>
             <div className="flex justify-between items-center">
@@ -1677,6 +1806,7 @@ export const SwapTile = () => {
                   selectedToken={buyToken}
                   tokens={tokens}
                   onSelect={handleBuyTokenSelect}
+                  isEthBalanceFetching={isEthBalanceFetching}
                 />
               </div>
               <div className="flex justify-between items-center">
