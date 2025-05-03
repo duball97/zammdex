@@ -123,17 +123,38 @@ const getAmountIn = (
 ──────────────────────────────────────────────────────────────────────────── */
 
 const useAllTokens = () => {
-  const publicClient = usePublicClient({ chainId: mainnet.id });
+  const publicClient = usePublicClient({ chainId: mainnet.id }); // Always use mainnet
   const { address } = useAccount();
   const [tokens, setTokens] = useState<TokenMeta[]>([ETH_TOKEN]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Get ETH balance using wagmi hook
-  const { data: ethBalance } = useBalance({
+  // Get ETH balance using wagmi hook with optimized settings
+  const { data: ethBalance, isSuccess: ethBalanceSuccess, refetch: refetchEthBalance } = useBalance({
     address,
     chainId: mainnet.id,
+    watch: true, // Watch for changes to update in real-time
+    cacheTime: 5_000, // Cache for 5 seconds
+    staleTime: 2_000, // Consider data stale after 2 seconds
+    scopeKey: 'ethBalance', // Unique key for this balance query
   });
+  
+  // Refetch ETH balance when component mounts and when the chain changes
+  useEffect(() => {
+    if (address) {
+      console.log("Manually triggering ETH balance refetch");
+      refetchEthBalance();
+    }
+  }, [address, refetchEthBalance]);
+  
+  // Log ETH balance status for debugging
+  useEffect(() => {
+    console.log('ETH Balance Status:', { 
+      hasAddress: !!address, 
+      ethBalance: ethBalance ? formatEther(ethBalance.value) : 'undefined',
+      isSuccess: ethBalanceSuccess
+    });
+  }, [address, ethBalance, ethBalanceSuccess]);
 
   // Update ETH balance in our token list when it changes
   useEffect(() => {
@@ -351,14 +372,28 @@ const useAllTokens = () => {
         // Get the updated ETH token with balance from current state or use ethBalance directly
         const currentEthToken = tokens.find(token => token.id === null) || ETH_TOKEN;
         
-        // Create a new ETH token with balance preserved
+        // Create a new ETH token with balance preserved - ALWAYS prioritize the latest ethBalance
         const ethTokenWithBalance = {
           ...currentEthToken,
-          // If we have an updated ethBalance, use it, otherwise keep the current balance
-          balance: ethBalance?.value || currentEthToken.balance
+          // If we have ethBalance, ALWAYS use it as the most up-to-date value
+          balance: ethBalance?.value !== undefined ? ethBalance.value : currentEthToken.balance,
+          // Add formatted balance for debugging
+          formattedBalance: ethBalance?.formatted || 
+            (currentEthToken.balance ? formatEther(currentEthToken.balance) : '0')
         };
         
-        console.log(`Setting ETH token with balance: ${ethTokenWithBalance.balance ? formatEther(ethTokenWithBalance.balance) : '0'} ETH`);
+        // Debug the ETH balance with more detailed logging
+        if (ethBalance?.value !== undefined) {
+          console.log(`Fresh ETH Balance from wagmi: ${formatEther(ethBalance.value)} ETH (${ethBalance.formatted})`);
+          console.log(`Previous ETH Balance: ${currentEthToken.balance ? formatEther(currentEthToken.balance) : '0'} ETH`);
+          
+          // Log if there's a discrepancy
+          if (currentEthToken.balance !== ethBalance.value) {
+            console.log(`ETH Balance updated: ${currentEthToken.balance ? formatEther(currentEthToken.balance) : '0'} -> ${formatEther(ethBalance.value)}`);
+          }
+        }
+        
+        console.log(`Setting ETH token with balance: ${ethTokenWithBalance.formattedBalance} ETH`);
         
         // ETH is always first
         const allTokens = [ethTokenWithBalance, ...sortedTokens];
@@ -404,22 +439,38 @@ const TokenSelector = ({
   
   // Format token balance for display
   const formatBalance = (token: TokenMeta) => {
-    if (!token.balance) return '';
+    if (token.balance === undefined) return '';
+    if (token.balance === 0n) return '0';
     
-    const balanceValue = token.id === null 
-      ? Number(formatEther(token.balance)) 
-      : Number(formatUnits(token.balance, 18));
-    
-    if (balanceValue >= 1000) {
-      return `${Math.floor(balanceValue).toLocaleString()}`;
-    } else if (balanceValue >= 1) {
-      return balanceValue.toFixed(2);
-    } else if (balanceValue >= 0.01) {
-      return balanceValue.toFixed(4);
-    } else if (balanceValue > 0) {
-      return balanceValue.toFixed(6);
+    try {
+      // Convert balance to a number for display formatting
+      const balanceValue = token.id === null 
+        ? Number(formatEther(token.balance)) 
+        : Number(formatUnits(token.balance, 18));
+      
+      // Format based on size
+      if (balanceValue >= 1000) {
+        return `${Math.floor(balanceValue).toLocaleString()}`;
+      } else if (balanceValue >= 1) {
+        return balanceValue.toFixed(3); // Show 3 decimals for values ≥ 1
+      } else if (balanceValue >= 0.001) {
+        return balanceValue.toFixed(4); // Show 4 decimals for smaller values
+      } else if (balanceValue >= 0.0001) {
+        return balanceValue.toFixed(6); // Show more precision for tiny values
+      } else if (balanceValue > 0) {
+        // For ETH (reserve asset), always show a readable value even for tiny amounts
+        if (token.id === null) {
+          // For extremely small ETH amounts (< 0.0001), show with 8 decimals max
+          return balanceValue.toFixed(8);
+        }
+        // For non-ETH tokens, use scientific notation for extremely small amounts
+        return balanceValue.toExponential(2);
+      }
+      return '0';
+    } catch (error) {
+      console.error('Error formatting balance:', error);
+      return '0';
     }
-    return '0';
   };
   
   // Get initials for fallback display
@@ -555,16 +606,11 @@ const TokenSelector = ({
           <div className="flex items-center gap-1">
             <span className="font-medium">{selectedToken.symbol}</span>
           </div>
-          {selectedToken.balance !== undefined && (
-            <div className="flex items-center gap-1">
-              <span className="text-xs font-medium text-gray-700">
-                {formatBalance(selectedToken)}
-              </span>
-              <span className="text-xs text-gray-500">
-                available
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-medium text-gray-700">
+              {selectedToken.balance !== undefined ? formatBalance(selectedToken) : ''}
+            </span>
+          </div>
         </div>
         <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -589,15 +635,22 @@ const TokenSelector = ({
               // Format ETH reserves to a readable format based on size
               const ethValue = Number(formatEther(token.reserve0));
               
-              if (ethValue >= 1.0) {
-                // For larger pools, show with 2 decimal places
-                return `${ethValue.toFixed(2)} ETH`;
-              } else if (ethValue >= 0.01) {
+              if (ethValue >= 1000) {
+                return `${Math.floor(ethValue).toLocaleString()} ETH`;
+              } else if (ethValue >= 1.0) {
+                // For larger pools, show with 3 decimal places
+                return `${ethValue.toFixed(3)} ETH`;
+              } else if (ethValue >= 0.001) {
                 // For medium pools, show with 4 decimal places
                 return `${ethValue.toFixed(4)} ETH`;
+              } else if (ethValue >= 0.0001) {
+                // Show small amounts with more precision
+                return `${ethValue.toFixed(6)} ETH`;
+              } else if (ethValue > 0) {
+                // For very small pools, show with 8 decimal places
+                return `${ethValue.toFixed(8)} ETH`;
               } else {
-                // For very small pools, scientific notation
-                return `${ethValue.toExponential(2)} ETH`;
+                return 'No liquidity';
               }
             };
             
@@ -622,19 +675,11 @@ const TokenSelector = ({
                     )}
                   </div>
                 </div>
-                {balance && (
-                  <div className="text-right">
-                    <div className="flex items-center">
-                      <span className="text-sm font-medium">{balance}</span>
-                      {balance !== '0' && (
-                        <span className="text-xs text-gray-500 ml-1">{token.symbol}</span>
-                      )}
-                    </div>
-                    {token.id === null && balance && balance !== '0' && (
-                      <span className="text-xs text-gray-500 italic">for gas & swaps</span>
-                    )}
-                  </div>
-                )}
+                <div className="text-right">
+                  <span className="text-sm font-medium">
+                    {balance || ''}
+                  </span>
+                </div>
               </div>
             );
           })}
@@ -679,7 +724,25 @@ export const SwapTile = () => {
     }
   }, [tokens, buyToken]);
 
-  // Handle token selection
+  // Simple hook to keep ETH token state in sync
+  useEffect(() => {
+    if (tokens.length === 0) return;
+    
+    const updatedEthToken = tokens.find(token => token.id === null);
+    if (!updatedEthToken) return;
+    
+    // Update sellToken if it's ETH
+    if (sellToken.id === null) {
+      setSellToken(updatedEthToken);
+    }
+    
+    // Update buyToken if it's ETH
+    if (buyToken && buyToken.id === null) {
+      setBuyToken(updatedEthToken);
+    }
+  }, [tokens]);
+
+  // Simple token selection handlers
   const handleSellTokenSelect = (token: TokenMeta) => {
     console.log("Sell token changed:", token);
     setSellToken(token);
@@ -693,8 +756,11 @@ export const SwapTile = () => {
   const flipTokens = () => {
     if (!buyToken) return;
     console.log("Flipping tokens:", { from: sellToken, to: buyToken });
+    
+    // Simple flip
+    const tempToken = sellToken;
     setSellToken(buyToken);
-    setBuyToken(sellToken);
+    setBuyToken(tempToken);
   };
 
   /* derived flags */
@@ -717,7 +783,6 @@ export const SwapTile = () => {
   /* additional wagmi hooks */
   const { writeContractAsync, isPending, error: writeError } = useWriteContract();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
-  const { switchChain } = useSwitchChain();
   const chainId = useChainId();
   
   /* Calculate pool reserves */
@@ -1026,19 +1091,11 @@ export const SwapTile = () => {
     setTxError(null);
     
     try {
-      // Switch to mainnet if needed
+      // Check if we're on mainnet
       if (chainId !== mainnet.id) {
-        try {
-          await switchChain({ chainId: mainnet.id });
-        } catch (err) {
-          // Use our utility to handle wallet errors
-          const errorMsg = handleWalletError(err);
-          if (errorMsg) {
-            console.error("Failed to switch to Ethereum mainnet:", err);
-            setTxError("Failed to switch to Ethereum mainnet");
-          }
-          return;
-        }
+        console.log("Not on Ethereum mainnet. Current chainId:", chainId);
+        setTxError("Please connect to Ethereum mainnet to perform this action");
+        return;
       }
       
       const poolKey = computePoolKey(coinId);
@@ -1064,7 +1121,6 @@ export const SwapTile = () => {
           address,
           deadline,
         ],
-        chainId: mainnet.id,
       });
       
       setTxHash(hash);
@@ -1098,19 +1154,11 @@ export const SwapTile = () => {
     setTxError(null);
     
     try {
-      // Switch to mainnet if needed
+      // Check if we're on mainnet
       if (chainId !== mainnet.id) {
-        try {
-          await switchChain({ chainId: mainnet.id });
-        } catch (err) {
-          // Use our utility to handle wallet errors
-          const errorMsg = handleWalletError(err);
-          if (errorMsg) {
-            console.error("Failed to switch to Ethereum mainnet:", err);
-            setTxError("Failed to switch to Ethereum mainnet");
-          }
-          return;
-        }
+        console.log("Not on Ethereum mainnet. Current chainId:", chainId);
+        setTxError("Please connect to Ethereum mainnet to perform this action");
+        return;
       }
       
       const poolKey = computePoolKey(coinId);
@@ -1152,7 +1200,6 @@ export const SwapTile = () => {
             abi: CoinsAbi,
             functionName: "setOperator",
             args: [ZAAMAddress, true],
-            chainId: mainnet.id,
           });
           
           // Show a waiting message
@@ -1235,7 +1282,6 @@ export const SwapTile = () => {
             deadline,
           ],
           value: ethAmount, // Use the exact ETH amount calculated by ZAMMHelper
-          chainId: mainnet.id,
         });
         
         setTxHash(hash);
@@ -1280,19 +1326,11 @@ export const SwapTile = () => {
     setTxError(null);
     
     try {
-      // Switch to mainnet if needed
+      // Check if we're on mainnet
       if (chainId !== mainnet.id) {
-        try {
-          await switchChain({ chainId: mainnet.id });
-        } catch (err) {
-          // Use our utility to handle wallet errors
-          const errorMsg = handleWalletError(err);
-          if (errorMsg) {
-            console.error("Failed to switch to Ethereum mainnet:", err);
-            setTxError("Failed to switch to Ethereum mainnet");
-          }
-          return;
-        }
+        console.log("Not on Ethereum mainnet. Current chainId:", chainId);
+        setTxError("Please connect to Ethereum mainnet to perform this action");
+        return;
       }
 
       const poolKey = computePoolKey(coinId);
@@ -1324,7 +1362,6 @@ export const SwapTile = () => {
             nowSec() + BigInt(DEADLINE_SEC),
           ],
           value: amountInWei,
-          chainId: mainnet.id,
         });
         setTxHash(hash);
       } else {
@@ -1434,7 +1471,6 @@ export const SwapTile = () => {
               abi: ZAAMAbi,
               functionName: "multicall",
               args: [multicallData],
-              chainId: mainnet.id,
             });
             
             console.log(`Transaction hash: ${hash}`);
@@ -1476,7 +1512,6 @@ export const SwapTile = () => {
             address,
             nowSec() + BigInt(DEADLINE_SEC),
           ],
-          chainId: mainnet.id,
         });
         setTxHash(hash);
       }
@@ -1669,8 +1704,8 @@ export const SwapTile = () => {
 
         {/* Network indicator */}
         {isConnected && chainId !== mainnet.id && (
-          <div className="text-xs mt-1 px-1 text-yellow-600">
-            Please connect to Ethereum mainnet (will auto-switch when {mode === "swap" ? "swapping" : "adding liquidity"})
+          <div className="text-xs mt-1 px-2 py-1 bg-yellow-50 border border-yellow-200 rounded text-yellow-700">
+            <strong>Wrong Network:</strong> Please switch to Ethereum mainnet in your wallet to {mode === "swap" ? "swap tokens" : "manage liquidity"}
           </div>
         )}
         
