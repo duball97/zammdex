@@ -7,6 +7,7 @@ import {
   usePublicClient,
   useSwitchChain,
   useChainId,
+  useBalance,
 } from "wagmi";
 import { handleWalletError, isUserRejectionError } from "./utils";
 import {
@@ -45,6 +46,7 @@ export interface TokenMeta {
   tokenUri?: string; // Added tokenUri field to display thumbnails
   reserve0?: bigint; // ETH reserves in the pool
   reserve1?: bigint; // Token reserves in the pool
+  balance?: bigint; // User's balance of this token
 }
 
 // Inline SVG for ETH
@@ -65,6 +67,7 @@ const ETH_TOKEN: TokenMeta = {
   symbol: "ETH",
   tokenUri: `data:image/svg+xml;base64,${btoa(ETH_SVG)}`, // Embed ETH SVG as data URI
   reserve0: BigInt(Number.MAX_SAFE_INTEGER), // Ensure ETH is always at the top (special case)
+  balance: 0n, // Will be updated with actual balance in useAllTokens hook
 };
 
 const computePoolKey = (coinId: bigint) => ({
@@ -116,14 +119,48 @@ const getAmountIn = (
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-  HOOK: Simplified approach to fetch all tokens with tokenUri
+  HOOK: Simplified approach to fetch all tokens with tokenUri and balances
 ──────────────────────────────────────────────────────────────────────────── */
 
 const useAllTokens = () => {
   const publicClient = usePublicClient({ chainId: mainnet.id });
+  const { address } = useAccount();
   const [tokens, setTokens] = useState<TokenMeta[]>([ETH_TOKEN]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Get ETH balance using wagmi hook
+  const { data: ethBalance } = useBalance({
+    address,
+    chainId: mainnet.id,
+  });
+
+  // Update ETH balance in our token list when it changes
+  useEffect(() => {
+    if (ethBalance) {
+      console.log(`ETH Balance available: ${formatEther(ethBalance.value)} ETH`);
+      
+      // Create a new ETH token object with the balance
+      const ethTokenWithBalance = {
+        ...ETH_TOKEN,
+        balance: ethBalance.value
+      };
+      
+      // Update the tokens array, replacing the ETH token
+      setTokens(prevTokens => {
+        // If we only have the ETH token, just update it
+        if (prevTokens.length === 1 && prevTokens[0].id === null) {
+          return [ethTokenWithBalance];
+        }
+        
+        // Otherwise, replace the ETH token while keeping the other tokens
+        return [
+          ethTokenWithBalance,
+          ...prevTokens.filter(token => token.id !== null)
+        ];
+      });
+    }
+  }, [ethBalance]);
 
   useEffect(() => {
     const fetchTokens = async () => {
@@ -181,7 +218,7 @@ const useAllTokens = () => {
           return;
         }
 
-        // Step 3: Get metadata and reserves for each coin
+        // Step 3: Get metadata, reserves, and balances for each coin
         const tokenPromises = coinIds.map(async (id) => {
           try {
             // Fetch metadata
@@ -248,8 +285,27 @@ const useAllTokens = () => {
               console.error(`Failed to fetch reserves for coin ${id}:`, err);
               // Keep reserves as 0n if we couldn't fetch them
             }
+            
+            // Fetch user's balance if address is connected
+            let balance: bigint = 0n;
+            if (address) {
+              try {
+                const balanceResult = await publicClient.readContract({
+                  address: CoinsAddress,
+                  abi: CoinsAbi,
+                  functionName: "balanceOf",
+                  args: [address, id],
+                });
+                
+                balance = balanceResult as bigint;
+                console.log(`User balance for coin ${id} (${symbol}): ${formatUnits(balance, 18)}`);
+              } catch (err) {
+                console.error(`Failed to fetch balance for coin ${id}:`, err);
+                // Keep balance as 0n if we couldn't fetch it
+              }
+            }
 
-            return { id, symbol, name, tokenUri, reserve0, reserve1 } as TokenMeta;
+            return { id, symbol, name, tokenUri, reserve0, reserve1, balance } as TokenMeta;
           } catch (err) {
             console.error(`Failed to get metadata for coin ${id}:`, err);
             return { 
@@ -258,12 +314,13 @@ const useAllTokens = () => {
               name: `Coin #${id.toString()}`,
               tokenUri: "",
               reserve0: 0n, 
-              reserve1: 0n
+              reserve1: 0n,
+              balance: 0n
             } as TokenMeta;
           }
         });
 
-        console.log("Fetching token metadata and reserves...");
+        console.log("Fetching token metadata, reserves, and balances...");
         const tokenResults = await Promise.all(tokenPromises);
         
         // Filter out any tokens with fetch errors
@@ -286,12 +343,25 @@ const useAllTokens = () => {
           sortedTokens.map(t => ({
             symbol: t.symbol,
             id: t.id?.toString(),
-            ethReserve: t.reserve0?.toString()
+            ethReserve: t.reserve0?.toString(),
+            userBalance: t.balance?.toString()
           }))
         );
         
+        // Get the updated ETH token with balance from current state or use ethBalance directly
+        const currentEthToken = tokens.find(token => token.id === null) || ETH_TOKEN;
+        
+        // Create a new ETH token with balance preserved
+        const ethTokenWithBalance = {
+          ...currentEthToken,
+          // If we have an updated ethBalance, use it, otherwise keep the current balance
+          balance: ethBalance?.value || currentEthToken.balance
+        };
+        
+        console.log(`Setting ETH token with balance: ${ethTokenWithBalance.balance ? formatEther(ethTokenWithBalance.balance) : '0'} ETH`);
+        
         // ETH is always first
-        const allTokens = [ETH_TOKEN, ...sortedTokens];
+        const allTokens = [ethTokenWithBalance, ...sortedTokens];
         
         console.log(`Final token list has ${allTokens.length} tokens, sorted by ETH reserves`);
         setTokens(allTokens);
@@ -304,7 +374,7 @@ const useAllTokens = () => {
     };
 
     fetchTokens();
-  }, [publicClient]);
+  }, [publicClient, address]);
 
   return { tokens, loading, error };
 };
@@ -328,6 +398,28 @@ const TokenSelector = ({
   const handleSelect = (token: TokenMeta) => {
     onSelect(token);
     setIsOpen(false);
+  };
+  
+  // Helper functions for formatting and display
+  
+  // Format token balance for display
+  const formatBalance = (token: TokenMeta) => {
+    if (!token.balance) return '';
+    
+    const balanceValue = token.id === null 
+      ? Number(formatEther(token.balance)) 
+      : Number(formatUnits(token.balance, 18));
+    
+    if (balanceValue >= 1000) {
+      return `${Math.floor(balanceValue).toLocaleString()}`;
+    } else if (balanceValue >= 1) {
+      return balanceValue.toFixed(2);
+    } else if (balanceValue >= 0.01) {
+      return balanceValue.toFixed(4);
+    } else if (balanceValue > 0) {
+      return balanceValue.toFixed(6);
+    }
+    return '0';
   };
   
   // Get initials for fallback display
@@ -459,7 +551,21 @@ const TokenSelector = ({
         className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50"
       >
         <TokenImage token={selectedToken} />
-        <span className="font-medium">{selectedToken.symbol}</span>
+        <div className="flex flex-col">
+          <div className="flex items-center gap-1">
+            <span className="font-medium">{selectedToken.symbol}</span>
+          </div>
+          {selectedToken.balance !== undefined && (
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-medium text-gray-700">
+                {formatBalance(selectedToken)}
+              </span>
+              <span className="text-xs text-gray-500">
+                available
+              </span>
+            </div>
+          )}
+        </div>
         <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
         </svg>
@@ -497,21 +603,38 @@ const TokenSelector = ({
             
             const reserves = formatReserves(token);
             
+            const balance = formatBalance(token);
+            
             return (
               <div 
                 key={token.id?.toString() ?? "eth"}
                 onClick={() => handleSelect(token)}
-                className={`flex items-center gap-2 p-2 hover:bg-yellow-50 cursor-pointer ${
+                className={`flex items-center justify-between p-2 hover:bg-yellow-50 cursor-pointer ${
                   isSelected ? "bg-yellow-100" : ""
                 }`}
               >
-                <TokenImage token={token} />
-                <div className="flex flex-col">
-                  <span className="font-medium">{token.symbol}</span>
-                  {reserves && (
-                    <span className="text-xs text-gray-500">{reserves}</span>
-                  )}
+                <div className="flex items-center gap-2">
+                  <TokenImage token={token} />
+                  <div className="flex flex-col">
+                    <span className="font-medium">{token.symbol}</span>
+                    {reserves && (
+                      <span className="text-xs text-gray-500">{reserves}</span>
+                    )}
+                  </div>
                 </div>
+                {balance && (
+                  <div className="text-right">
+                    <div className="flex items-center">
+                      <span className="text-sm font-medium">{balance}</span>
+                      {balance !== '0' && (
+                        <span className="text-xs text-gray-500 ml-1">{token.symbol}</span>
+                      )}
+                    </div>
+                    {token.id === null && balance && balance !== '0' && (
+                      <span className="text-xs text-gray-500 italic">for gas & swaps</span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -538,6 +661,9 @@ export const SwapTile = () => {
   const [liquidityMode, setLiquidityMode] = useState<LiquidityMode>("add");
   const [lpTokenBalance, setLpTokenBalance] = useState<bigint>(0n);
   const [lpBurnAmount, setLpBurnAmount] = useState<string>("");
+  
+  // Get wagmi hooks
+  const { address, isConnected } = useAccount();
   
   // Get the public client for contract interactions
   const publicClient = usePublicClient({ chainId: mainnet.id });
@@ -588,8 +714,7 @@ export const SwapTile = () => {
   const [txHash, setTxHash] = useState<`0x${string}`>();
   const [txError, setTxError] = useState<string | null>(null);
 
-  /* wagmi hooks */
-  const { address, isConnected } = useAccount();
+  /* additional wagmi hooks */
   const { writeContractAsync, isPending, error: writeError } = useWriteContract();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const { switchChain } = useSwitchChain();
@@ -1378,7 +1503,7 @@ export const SwapTile = () => {
   return (
     <Card className="w-lg p-6 border-2 border-yellow-100 shadow-md rounded-xl">
       <CardContent className="p-1 flex flex-col space-y-1">
-        {/* Info showing token count and sorting method */}
+        {/* Info showing token count */}
         <div className="text-xs text-gray-500 mb-2">
           Available tokens: {tokenCount} (ETH + {tokenCount - 1} coins, sorted by liquidity)
         </div>
@@ -1417,15 +1542,17 @@ export const SwapTile = () => {
             <div className="border-2 border-yellow-500 group hover:bg-yellow-50 rounded-t-2xl p-3 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2 bg-yellow-50">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-yellow-800">LP Tokens to Burn</span>
-                <span className="text-xs text-yellow-700">
-                  Balance: {formatUnits(lpTokenBalance, 18)}
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-yellow-700">
+                    Balance: {formatUnits(lpTokenBalance, 18)}
+                  </span>
                   <button
-                    className="ml-2 text-yellow-600 hover:text-yellow-800 font-medium"
+                    className="text-xs bg-yellow-200 hover:bg-yellow-300 text-yellow-800 font-medium px-2 py-0.5 rounded"
                     onClick={() => syncFromSell(formatUnits(lpTokenBalance, 18))}
                   >
                     MAX
                   </button>
-                </span>
+                </div>
               </div>
               <input
                 type="number"
@@ -1469,6 +1596,25 @@ export const SwapTile = () => {
               />
               {mode === "liquidity" && liquidityMode === "remove" && (
                 <span className="text-xs text-yellow-600 font-medium">Preview</span>
+              )}
+              {/* MAX button for using full balance */}
+              {sellToken.balance !== undefined && sellToken.balance > 0n && mode !== "liquidity" && liquidityMode !== "remove" && (
+                <button
+                  className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-medium px-2 py-0.5 rounded"
+                  onClick={() => {
+                    // For ETH, leave a small amount for gas
+                    if (sellToken.id === null) {
+                      // Get 99% of ETH balance to leave some for gas
+                      const ethAmount = (sellToken.balance as bigint * 99n) / 100n;
+                      syncFromSell(formatEther(ethAmount));
+                    } else {
+                      // For other tokens, use the full balance
+                      syncFromSell(formatUnits(sellToken.balance as bigint, 18));
+                    }
+                  }}
+                >
+                  MAX
+                </button>
               )}
             </div>
           </div>
