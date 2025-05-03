@@ -5,7 +5,6 @@ import {
   useWaitForTransactionReceipt,
   useAccount,
   usePublicClient,
-  useSwitchChain,
   useChainId,
   useBalance,
 } from "wagmi";
@@ -133,9 +132,6 @@ const useAllTokens = () => {
   const { data: ethBalance, isSuccess: ethBalanceSuccess, refetch: refetchEthBalance } = useBalance({
     address,
     chainId: mainnet.id,
-    watch: true, // Watch for changes to update in real-time
-    cacheTime: 5_000, // Cache for 5 seconds
-    staleTime: 2_000, // Consider data stale after 2 seconds
     scopeKey: 'ethBalance', // Unique key for this balance query
   });
   
