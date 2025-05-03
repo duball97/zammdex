@@ -1017,15 +1017,36 @@ export const SwapTile = () => {
       // Since we're always providing Coin tokens in liquidity, we need approval
       if (isOperator === false) {
         try {
+          // First, show a notification about the approval step
+          setTxError("Waiting for operator approval. Please confirm the transaction...");
           console.log("Setting ZAMM as operator for Coin tokens");
-          await writeContractAsync({
+          
+          // Send the approval transaction
+          const approvalHash = await writeContractAsync({
             address: CoinsAddress,
             abi: CoinsAbi,
             functionName: "setOperator",
             args: [ZAAMAddress, true],
             chainId: mainnet.id,
           });
-          setIsOperator(true);
+          
+          // Show a waiting message
+          setTxError("Operator approval submitted. Waiting for confirmation...");
+          
+          // Wait for the transaction to be mined
+          const receipt = await publicClient.waitForTransactionReceipt({ 
+            hash: approvalHash 
+          });
+          
+          // Check if the transaction was successful
+          if (receipt.status === 'success') {
+            setIsOperator(true);
+            setTxError(null); // Clear the message
+            console.log("Operator approval confirmed. Proceeding with adding liquidity...");
+          } else {
+            setTxError("Operator approval failed. Please try again.");
+            return;
+          }
         } catch (err) {
           // Use our utility to handle wallet errors
           const errorMsg = handleWalletError(err);
@@ -1187,14 +1208,35 @@ export const SwapTile = () => {
         // Approve ZAAM as operator if needed
         if (isOperator === false) {
           try {
-            await writeContractAsync({
+            // First, show a notification about the approval step
+            setTxError("Waiting for operator approval. Please confirm the transaction...");
+            
+            // Send the approval transaction
+            const approvalHash = await writeContractAsync({
               address: CoinsAddress,
               abi: CoinsAbi,
               functionName: "setOperator",
               args: [ZAAMAddress, true],
               chainId: mainnet.id,
             });
-            setIsOperator(true);
+            
+            // Show a waiting message
+            setTxError("Operator approval submitted. Waiting for confirmation...");
+            
+            // Wait for the transaction to be mined
+            const receipt = await publicClient.waitForTransactionReceipt({ 
+              hash: approvalHash 
+            });
+            
+            // Check if the transaction was successful
+            if (receipt.status === 'success') {
+              setIsOperator(true);
+              setTxError(null); // Clear the message
+              console.log("Operator approval confirmed. Proceeding with swap...");
+            } else {
+              setTxError("Operator approval failed. Please try again.");
+              return;
+            }
           } catch (err) {
             // Use our utility to handle wallet errors
             const errorMsg = handleWalletError(err);
@@ -1562,17 +1604,30 @@ export const SwapTile = () => {
           }
         </Button>
 
-        {/* Error handling */}
-        {/* Only show error if it's not a user rejection */}
-        {((writeError && !isUserRejectionError(writeError)) || txError) && (
-          <div className="text-sm text-red-600 mt-2">{
-            writeError && !isUserRejectionError(writeError) ? writeError.message : txError
-          }</div>
+        {/* Status and error messages */}
+        {/* Show transaction statuses */}
+        {txError && txError.includes("Waiting for") && (
+          <div className="text-sm text-yellow-600 mt-2 flex items-center">
+            <Loader2 className="h-3 w-3 animate-spin mr-2" />
+            {txError}
+          </div>
+        )}
+        
+        {/* Show actual errors (only if not a user rejection) */}
+        {((writeError && !isUserRejectionError(writeError)) || (txError && !txError.includes("Waiting for"))) && (
+          <div className="text-sm text-red-600 mt-2">
+            {writeError && !isUserRejectionError(writeError) ? writeError.message : txError}
+          </div>
         )}
         
         {/* Success message */}
         {isSuccess && (
-          <div className="text-sm text-green-600 mt-2">Transaction confirmed!</div>
+          <div className="text-sm text-green-600 mt-2 flex items-center">
+            <svg className="h-3 w-3 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+            Transaction confirmed!
+          </div>
         )}
         
         {/* Subtle explorer link */}
