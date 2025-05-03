@@ -555,7 +555,7 @@ const TokenSelector = ({
           <div className="flex items-center gap-1">
             <span className="font-medium">{selectedToken.symbol}</span>
           </div>
-          {selectedToken.balance && (
+          {selectedToken.balance !== undefined && (
             <div className="flex items-center gap-1">
               <span className="text-xs font-medium text-gray-700">
                 {formatBalance(selectedToken)}
@@ -630,7 +630,7 @@ const TokenSelector = ({
                         <span className="text-xs text-gray-500 ml-1">{token.symbol}</span>
                       )}
                     </div>
-                    {token.id === null && balance !== '0' && (
+                    {token.id === null && balance && balance !== '0' && (
                       <span className="text-xs text-gray-500 italic">for gas & swaps</span>
                     )}
                   </div>
@@ -664,10 +664,6 @@ export const SwapTile = () => {
   
   // Get wagmi hooks
   const { address, isConnected } = useAccount();
-  const { data: ethBalanceData } = useBalance({
-    address,
-    chainId: mainnet.id,
-  });
   
   // Get the public client for contract interactions
   const publicClient = usePublicClient({ chainId: mainnet.id });
@@ -1602,18 +1598,18 @@ export const SwapTile = () => {
                 <span className="text-xs text-yellow-600 font-medium">Preview</span>
               )}
               {/* MAX button for using full balance */}
-              {sellToken.balance && sellToken.balance > 0n && mode !== "liquidity" && liquidityMode !== "remove" && (
+              {sellToken.balance !== undefined && sellToken.balance > 0n && mode !== "liquidity" && liquidityMode !== "remove" && (
                 <button
                   className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-medium px-2 py-0.5 rounded"
                   onClick={() => {
                     // For ETH, leave a small amount for gas
                     if (sellToken.id === null) {
                       // Get 99% of ETH balance to leave some for gas
-                      const ethAmount = (sellToken.balance * 99n) / 100n;
+                      const ethAmount = (sellToken.balance as bigint * 99n) / 100n;
                       syncFromSell(formatEther(ethAmount));
                     } else {
                       // For other tokens, use the full balance
-                      syncFromSell(formatUnits(sellToken.balance, 18));
+                      syncFromSell(formatUnits(sellToken.balance as bigint, 18));
                     }
                   }}
                 >
