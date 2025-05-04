@@ -27,7 +27,7 @@ import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowDownUp, Plus, Minus, Droplet } from "lucide-react";
+import { Loader2, ArrowDownUp, Plus, Minus } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -1914,7 +1914,7 @@ export const SwapTile = () => {
                 value="single-eth" 
                 className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
               >
-                <Droplet className="h-4 w-4 mr-1" />
+                <span className="text-xs font-medium mr-1">Ξ</span>
                 Single-ETH
               </TabsTrigger>
             </TabsList>
@@ -1974,8 +1974,12 @@ export const SwapTile = () => {
               {/* Hide token selector in single-eth mode since only ETH is allowed */}
               {mode === "liquidity" && liquidityMode === "single-eth" ? (
                 <div className="flex items-center gap-2 bg-transparent border border-yellow-200 rounded-md px-2 py-1">
-                  <div className="w-8 h-8 flex bg-black text-white justify-center items-center rounded-full text-xs font-medium">
-                    ET
+                  <div className="w-8 h-8 overflow-hidden rounded-full">
+                    <img 
+                      src={ETH_TOKEN.tokenUri}
+                      alt="ETH"
+                      className="w-8 h-8 object-cover"
+                    />
                   </div>
                   <div className="flex flex-col">
                     <span className="font-medium">ETH</span>
@@ -2009,7 +2013,8 @@ export const SwapTile = () => {
                 <span className="text-xs text-yellow-600 font-medium">Preview</span>
               )}
               {/* MAX button for using full balance */}
-              {sellToken.balance !== undefined && sellToken.balance > 0n && mode !== "liquidity" && liquidityMode !== "remove" && (
+              {sellToken.balance !== undefined && sellToken.balance > 0n && 
+               (mode === "swap" || (mode === "liquidity" && (liquidityMode === "add" || liquidityMode === "single-eth"))) && (
                 <button
                   className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-medium px-2 py-0.5 rounded"
                   onClick={() => {
@@ -2030,32 +2035,17 @@ export const SwapTile = () => {
             </div>
           </div>
           
-          {/* FLIP/PLUS/MINUS button */}
-          <button
-            className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl 
-              ${mode === "liquidity" && liquidityMode === "single-eth" 
-                  ? "bg-yellow-300 cursor-not-allowed" // disabled in single-eth mode
-                  : "bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 active:scale-95"} 
-              focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all z-10`}
-            onClick={
-              mode === "swap" 
-                ? flipTokens 
-                : (liquidityMode === "single-eth" 
-                    ? undefined // do nothing in single-eth mode 
-                    : () => setLiquidityMode(liquidityMode === "add" ? "remove" : "add"))
-            }
-            disabled={mode === "liquidity" && liquidityMode === "single-eth"}
-          >
-            {mode === "swap" ? (
+          {/* FLIP button - only shown in swap mode */}
+          {mode === "swap" && (
+            <button
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl 
+                bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 active:scale-95 
+                focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all z-10"
+              onClick={flipTokens}
+            >
               <ArrowDownUp className="h-4 w-4 text-white" />
-            ) : liquidityMode === "add" ? (
-              <Plus className="h-4 w-4 text-white" />
-            ) : liquidityMode === "remove" ? (
-              <Minus className="h-4 w-4 text-white" />
-            ) : (
-              <Droplet className="h-4 w-4 text-white" />
-            )}
-          </button>
+            </button>
+          )}
 
           {/* BUY/RECEIVE panel - Enhanced for Single-ETH mode with token selector */}
           {buyToken && mode === "liquidity" && liquidityMode === "single-eth" && (
