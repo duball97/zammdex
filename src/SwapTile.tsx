@@ -140,14 +140,12 @@ const useAllTokens = () => {
   useEffect(() => {
     if (!address) return;
     
-    console.log("Setting up ETH balance polling");
     
     // Immediately fetch on mount or when address changes
     refetchEthBalance();
     
     // Set up polling interval (every 10 seconds)
     const interval = setInterval(() => {
-      console.log("Polling ETH balance...");
       refetchEthBalance();
     }, 10000);
     
@@ -155,22 +153,14 @@ const useAllTokens = () => {
     return () => clearInterval(interval);
   }, [address, refetchEthBalance]);
   
-  // Log ETH balance status for debugging
+  // ETH balance status effect
   useEffect(() => {
-    console.log('ETH Balance Status:', { 
-      hasAddress: !!address, 
-      ethBalance: ethBalance ? formatEther(ethBalance.value) : 'undefined',
-      isSuccess: ethBalanceSuccess
-    });
+    // Effect implementation
   }, [address, ethBalance, ethBalanceSuccess]);
 
   // More robust ETH balance handling
   useEffect(() => {
-    // Create a detailed log for debugging
-    console.log(`ETH Balance State: ${ethBalance ? formatEther(ethBalance.value) : 'undefined'} ETH, ` +
-      `Success: ${ethBalanceSuccess}, ` + 
-      `Fetching: ${isEthBalanceFetching}, ` +
-      `Has Address: ${!!address}`);
+    // Process ETH balance and update state
     
     // Determine the balance value to use, with persistent state
     const effectiveBalance = ethBalance ? ethBalance.value : 
@@ -187,12 +177,10 @@ const useAllTokens = () => {
     };
     
     if (ethBalance) {
-      console.log(`ETH Balance available: ${formatEther(ethBalance.value)} ETH`);
       
       // Cache the ETH balance in localStorage for persistent display
       try {
         localStorage.setItem('ethBalance', ethBalance.value.toString());
-        console.log('ETH balance cached in localStorage');
       } catch (err) {
         console.error('Failed to cache ETH balance:', err);
       }
@@ -201,7 +189,6 @@ const useAllTokens = () => {
       try {
         const cachedBalance = localStorage.getItem('ethBalance');
         if (cachedBalance) {
-          console.log(`Using cached ETH balance: ${formatEther(BigInt(cachedBalance))} ETH`);
           ethTokenWithBalance.balance = BigInt(cachedBalance);
         }
       } catch (err) {
@@ -216,7 +203,6 @@ const useAllTokens = () => {
       
       // Special case: we're trying to set undefined balance, but we already have a real balance
       if (ethTokenWithBalance.balance === undefined && existingEthToken?.balance && existingEthToken.balance > 0n) {
-        console.log('Preserving existing ETH balance during refresh');
         ethTokenWithBalance.balance = existingEthToken.balance;
       }
       
@@ -243,14 +229,12 @@ const useAllTokens = () => {
 
       try {
         // Step 1: Get total coins count
-        console.log("Fetching coin count...");
         const countResult = await publicClient.readContract({
           address: CoinchanAddress,
           abi: CoinchanAbi,
           functionName: "getCoinsCount",
         });
         const count = Number(countResult);
-        console.log(`Contract reports ${count} total coins`);
 
         // Step 2: Get all coins directly using indices instead of getCoins
         const coinPromises = [];
@@ -267,7 +251,6 @@ const useAllTokens = () => {
           );
         }
 
-        console.log(`Fetching ${coinPromises.length} individual coins...`);
         const coinResults = await Promise.allSettled(coinPromises);
         const coinIds: bigint[] = [];
 
@@ -280,10 +263,8 @@ const useAllTokens = () => {
           }
         }
 
-        console.log(`Successfully retrieved ${coinIds.length} coin IDs`);
 
         if (coinIds.length === 0) {
-          console.log("No coins found, using ETH only");
           setTokens([ETH_TOKEN]);
           setLoading(false);
           return;
@@ -332,7 +313,6 @@ const useAllTokens = () => {
             
             try {
               const poolId = computePoolId(id);
-              console.log(`Fetching reserves for coin ${id}, poolId: ${poolId}`);
               
               const poolResult = await publicClient.readContract({
                 address: ZAAMAddress,
@@ -348,7 +328,6 @@ const useAllTokens = () => {
               if (poolData && poolData.length >= 2) {
                 reserve0 = poolData[0]; // ETH reserve
                 reserve1 = poolData[1]; // Token reserve
-                console.log(`Coin ${id} (${symbol}): ETH reserve = ${formatEther(reserve0)} ETH`);
               } else {
                 console.warn(`Invalid pool data for coin ${id}: ${JSON.stringify(poolData)}`);
               }
@@ -369,7 +348,6 @@ const useAllTokens = () => {
                 });
                 
                 balance = balanceResult as bigint;
-                console.log(`User balance for coin ${id} (${symbol}): ${formatUnits(balance, 18)}`);
               } catch (err) {
                 console.error(`Failed to fetch balance for coin ${id}:`, err);
                 // Keep balance as 0n if we couldn't fetch it
@@ -391,7 +369,6 @@ const useAllTokens = () => {
           }
         });
 
-        console.log("Fetching token metadata, reserves, and balances...");
         const tokenResults = await Promise.all(tokenPromises);
         
         // Filter out any tokens with fetch errors
@@ -409,15 +386,7 @@ const useAllTokens = () => {
           return reserveB > reserveA ? 1 : reserveB < reserveA ? -1 : 0;
         });
         
-        // Log the sorted tokens to debug
-        console.log("Sorted tokens (by ETH reserves):", 
-          sortedTokens.map(t => ({
-            symbol: t.symbol,
-            id: t.id?.toString(),
-            ethReserve: t.reserve0?.toString(),
-            userBalance: t.balance?.toString()
-          }))
-        );
+        // Tokens sorted by reserves
         
         // Get the updated ETH token with balance from current state or use ethBalance directly
         const currentEthToken = tokens.find(token => token.id === null) || ETH_TOKEN;
@@ -434,21 +403,16 @@ const useAllTokens = () => {
         
         // Debug the ETH balance with more detailed logging
         if (ethBalance?.value !== undefined) {
-          console.log(`Fresh ETH Balance from wagmi: ${formatEther(ethBalance.value)} ETH (${ethBalance.formatted})`);
-          console.log(`Previous ETH Balance: ${currentEthToken.balance ? formatEther(currentEthToken.balance) : '0'} ETH`);
           
           // Log if there's a discrepancy
           if (currentEthToken.balance !== ethBalance.value) {
-            console.log(`ETH Balance updated: ${currentEthToken.balance ? formatEther(currentEthToken.balance) : '0'} -> ${formatEther(ethBalance.value)}`);
           }
         }
         
-        console.log(`Setting ETH token with balance: ${ethTokenWithBalance.formattedBalance} ETH`);
         
         // ETH is always first
         const allTokens = [ethTokenWithBalance, ...sortedTokens];
         
-        console.log(`Final token list has ${allTokens.length} tokens, sorted by ETH reserves`);
         setTokens(allTokens);
       } catch (err) {
         console.error("Error fetching tokens:", err);
@@ -793,7 +757,6 @@ export const SwapTile = () => {
       if (sellToken.id !== null) {
         const ethToken = tokens.find(token => token.id === null);
         if (ethToken) {
-          console.log("Switching to ETH as sell token for Single-ETH mode");
           setSellToken(ethToken);
         }
       }
@@ -803,7 +766,6 @@ export const SwapTile = () => {
         // Find the first non-ETH token with the highest liquidity
         const defaultTarget = tokens.find(token => token.id !== null);
         if (defaultTarget) {
-          console.log("Setting default target token for Single-ETH mode:", defaultTarget.symbol);
           setBuyToken(defaultTarget);
         }
       }
@@ -824,7 +786,6 @@ export const SwapTile = () => {
   // Set initial buyToken once tokens are loaded
   useEffect(() => {
     if (!buyToken && tokens.length > 1) {
-      console.log("Setting initial buyToken to:", tokens[1]);
       setBuyToken(tokens[1]);
     }
   }, [tokens, buyToken]);
@@ -848,11 +809,7 @@ export const SwapTile = () => {
          sellToken.balance && sellToken.balance > 0n);
       
       if (shouldUpdate) {
-        console.log(`Updating sellToken ETH balance from ${
-          sellToken.balance ? formatEther(sellToken.balance) : 'undefined'
-        } to ${
-          updatedEthToken.balance ? formatEther(updatedEthToken.balance) : 'undefined'
-        }`);
+        // Update ETH token with balance changes
         
         // If the updated token has no balance but we already have one, merge them
         if ((!updatedEthToken.balance || updatedEthToken.balance === 0n) && 
@@ -876,11 +833,7 @@ export const SwapTile = () => {
          buyToken.balance && buyToken.balance > 0n);
       
       if (shouldUpdate) {
-        console.log(`Updating buyToken ETH balance from ${
-          buyToken.balance ? formatEther(buyToken.balance) : 'undefined'
-        } to ${
-          updatedEthToken.balance ? formatEther(updatedEthToken.balance) : 'undefined'
-        }`);
+        // Update buyToken ETH balance
         
         if ((!updatedEthToken.balance || updatedEthToken.balance === 0n) && 
             buyToken.balance && buyToken.balance > 0n) {
@@ -897,18 +850,15 @@ export const SwapTile = () => {
 
   // Simple token selection handlers
   const handleSellTokenSelect = (token: TokenMeta) => {
-    console.log("Sell token changed:", token);
     setSellToken(token);
   };
   
   const handleBuyTokenSelect = (token: TokenMeta) => {
-    console.log("Buy token changed:", token);
     setBuyToken(token);
   };
 
   const flipTokens = () => {
     if (!buyToken) return;
-    console.log("Flipping tokens:", { from: sellToken, to: buyToken });
     
     // Simple flip
     const tempToken = sellToken;
@@ -1020,7 +970,6 @@ export const SwapTile = () => {
           args: [address, poolId],
         }) as bigint;
         
-        console.log(`LP token balance for pool ${poolId}: ${balance}`);
         setLpTokenBalance(balance);
       } catch (err) {
         console.error("Failed to fetch LP token balance:", err);
@@ -1083,7 +1032,6 @@ export const SwapTile = () => {
         if (!poolInfo) return;
         
         // Extract supply from pool data (the 7th item in the array for this contract, index 6)
-        console.log("Pool info:", poolInfo);
         const totalSupply = poolInfo[6] as bigint; // Pool struct has supply at index 6
         
         if (totalSupply === 0n) return;
@@ -1097,11 +1045,6 @@ export const SwapTile = () => {
         const tokenAmount = (burnAmount * reserves.reserve1) / totalSupply;
         
         // Log calculation details for debugging
-        console.log("Remove Liquidity Preview Calculation:");
-        console.log(`Burn amount: ${formatUnits(burnAmount, 18)} LP tokens`);
-        console.log(`Total supply: ${formatUnits(totalSupply, 18)} LP tokens`);
-        console.log(`Pool reserves: ${formatEther(reserves.reserve0)} ETH, ${formatUnits(reserves.reserve1, 18)} tokens`);
-        console.log(`Expected return: ${formatEther(ethAmount)} ETH, ${formatUnits(tokenAmount, 18)} tokens`);
         
         // Sanity checks
         if (ethAmount > reserves.reserve0 || tokenAmount > reserves.reserve1) {
@@ -1178,7 +1121,6 @@ export const SwapTile = () => {
         } else {
           const formattedTokens = formatUnits(estimatedTokens, 18);
           setSingleETHEstimatedCoin(formattedTokens);
-          console.log(`Single-ETH mode: ${val} ETH will yield approximately ${formattedTokens} ${buyToken.symbol}`);
         }
       } catch (err) {
         console.error("Error estimating Single-ETH token amount:", err);
@@ -1200,7 +1142,7 @@ export const SwapTile = () => {
           const { estimateCoinToCoinOutput } = await import('./lib/swapHelper');
           
           const inUnits = parseUnits(val || "0", 18);
-          const { amountOut, ethAmountOut } = estimateCoinToCoinOutput(
+          const { amountOut } = estimateCoinToCoinOutput(
             sellToken.id,
             buyToken.id,
             inUnits,
@@ -1210,7 +1152,6 @@ export const SwapTile = () => {
           
           // For debugging purposes, log the estimated ETH intermediary amount
           if (amountOut > 0n) {
-            console.log(`Estimated path: ${formatUnits(inUnits, 18)} ${sellToken.symbol} → ${formatEther(ethAmountOut)} ETH → ${formatUnits(amountOut, 18)} ${buyToken.symbol}`);
           }
           
           setBuyAmt(amountOut === 0n ? "" : formatUnits(amountOut, 18));
@@ -1257,7 +1198,6 @@ export const SwapTile = () => {
         setSellAmt("");
         
         // Optional: Show a notification that this direction is not supported
-        console.log("Setting output directly not supported for coin-to-coin swaps");
       } else if (isSellETH) {
         // ETH → Coin path (calculate ETH input)
         const outUnits = parseUnits(val || "0", 18);
@@ -1305,7 +1245,6 @@ export const SwapTile = () => {
     try {
       // Check if we're on mainnet
       if (chainId !== mainnet.id) {
-        console.log("Not on Ethereum mainnet. Current chainId:", chainId);
         setTxError("Please connect to Ethereum mainnet to perform this action");
         return;
       }
@@ -1337,7 +1276,6 @@ export const SwapTile = () => {
             reserve1: poolData[1]
           };
           
-          console.log(`Fetched reserves for ${buyToken.symbol}: ${formatEther(targetReserves.reserve0)} ETH, ${formatUnits(targetReserves.reserve1, 18)} tokens`);
         } catch (err) {
           console.error(`Failed to fetch reserves for ${buyToken.symbol}:`, err);
           setTxError(`Failed to get pool data for ${buyToken.symbol}. Please try again.`);
@@ -1368,9 +1306,6 @@ export const SwapTile = () => {
       const amount0Min = withSlippage(halfEthAmount);
       const amount1Min = withSlippage(estimatedTokens);
       
-      console.log(`Single-sided ETH liquidity for ${buyToken.symbol}: ${formatEther(ethAmount)} ETH`);
-      console.log(`Expected tokens (half ETH swapped): ~${formatUnits(estimatedTokens, 18)} ${buyToken.symbol}`);
-      console.log(`Min amounts - Swap: ${formatUnits(minTokenAmount, 18)} ${buyToken.symbol}, Add: ${formatEther(amount0Min)} ETH, ${formatUnits(amount1Min, 18)} ${buyToken.symbol}`);
       
       // Call addSingleLiqETH on the ZAMMSingleLiqETH contract
       const hash = await writeContractAsync({
@@ -1423,7 +1358,6 @@ export const SwapTile = () => {
     try {
       // Check if we're on mainnet
       if (chainId !== mainnet.id) {
-        console.log("Not on Ethereum mainnet. Current chainId:", chainId);
         setTxError("Please connect to Ethereum mainnet to perform this action");
         return;
       }
@@ -1435,8 +1369,6 @@ export const SwapTile = () => {
       const amount0Min = sellAmt ? withSlippage(parseEther(sellAmt)) : 0n;
       const amount1Min = buyAmt ? withSlippage(parseUnits(buyAmt, 18)) : 0n;
       
-      console.log(`Removing liquidity - Burning ${formatUnits(burnAmount, 18)} LP tokens`);
-      console.log(`Min amounts - ETH: ${formatEther(amount0Min)}, Coin: ${formatUnits(amount1Min, 18)}`);
       
       // Call removeLiquidity on the ZAMM contract
       const hash = await writeContractAsync({
@@ -1486,7 +1418,6 @@ export const SwapTile = () => {
     try {
       // Check if we're on mainnet
       if (chainId !== mainnet.id) {
-        console.log("Not on Ethereum mainnet. Current chainId:", chainId);
         setTxError("Please connect to Ethereum mainnet to perform this action");
         return;
       }
@@ -1511,9 +1442,7 @@ export const SwapTile = () => {
         return;
       }
       
-      // Calculate minimum amounts with slippage protection
-      const amount0Min = withSlippage(amount0);
-      const amount1Min = withSlippage(amount1);
+      // Slippage protection will be calculated after getting exact amounts from ZAMMHelper
       
       // Check if the user needs to approve ZAMM as operator for their Coin token
       // This is needed when the user is providing Coin tokens (not just ETH)
@@ -1522,7 +1451,6 @@ export const SwapTile = () => {
         try {
           // First, show a notification about the approval step
           setTxError("Waiting for operator approval. Please confirm the transaction...");
-          console.log("Setting ZAMM as operator for Coin tokens");
           
           // Send the approval transaction
           const approvalHash = await writeContractAsync({
@@ -1544,7 +1472,6 @@ export const SwapTile = () => {
           if (receipt.status === 'success') {
             setIsOperator(true);
             setTxError(null); // Clear the message
-            console.log("Operator approval confirmed. Proceeding with adding liquidity...");
           } else {
             setTxError("Operator approval failed. Please try again.");
             return;
@@ -1560,11 +1487,8 @@ export const SwapTile = () => {
         }
       }
       
-      console.log(`Adding liquidity - ETH: ${formatEther(amount0)}, Coin: ${formatUnits(amount1, 18)}`);
-      console.log(`Min amounts - ETH: ${formatEther(amount0Min)}, Coin: ${formatUnits(amount1Min, 18)}`);
       
       // Use ZAMMHelper to calculate the exact ETH amount to provide
-      console.log("Calling ZAMMHelper.calculateRequiredETH to get the exact ETH amount...");
       try {
         // The contract call returns an array of values rather than an object
         const result = await publicClient.readContract({
@@ -1578,23 +1502,16 @@ export const SwapTile = () => {
           ],
         });
         
-        console.log("Raw ZAMMHelper result:", result);
         
         // Extract the values from the result array
         const [ethAmount, calcAmount0, calcAmount1] = result as [bigint, bigint, bigint];
         
         // Detailed logging to help with debugging
-        console.log(`==== LIQUIDITY CALCULATION (ZAMMHelper) ====`);
-        console.log(`Desired amounts: ${formatEther(amount0)} ETH / ${formatUnits(amount1, 18)} tokens`);
-        console.log(`ZAMMHelper calculated: ${formatEther(ethAmount)} ETH to provide`);
-        console.log(`ZAMMHelper amounts: ${formatEther(calcAmount0)} ETH / ${formatUnits(calcAmount1, 18)} tokens`);
-        console.log(`==============================`);
         
         // Calculate minimum amounts based on the actual amounts that will be used by the contract
         const actualAmount0Min = withSlippage(calcAmount0);
         const actualAmount1Min = withSlippage(calcAmount1);
         
-        console.log(`Min amounts adjusted: ${formatEther(actualAmount0Min)} ETH / ${formatUnits(actualAmount1Min, 18)} tokens`);
         
         // Use the ethAmount from ZAMMHelper as the exact value to send
         // IMPORTANT: We should also use the exact calculated amounts for amount0Desired and amount1Desired
@@ -1633,7 +1550,6 @@ export const SwapTile = () => {
         
         // More specific error messages based on error type
         if (err instanceof Error) {
-          console.log("Error details:", err);
           
           if (err.message.includes("insufficient funds")) {
             setTxError("Insufficient funds for this transaction");
@@ -1658,7 +1574,6 @@ export const SwapTile = () => {
     try {
       // Check if we're on mainnet
       if (chainId !== mainnet.id) {
-        console.log("Not on Ethereum mainnet. Current chainId:", chainId);
         setTxError("Please connect to Ethereum mainnet to perform this action");
         return;
       }
@@ -1723,7 +1638,6 @@ export const SwapTile = () => {
             if (receipt.status === 'success') {
               setIsOperator(true);
               setTxError(null); // Clear the message
-              console.log("Operator approval confirmed. Proceeding with swap...");
             } else {
               setTxError("Operator approval failed. Please try again.");
               return;
@@ -1774,7 +1688,6 @@ export const SwapTile = () => {
               return;
             }
             
-            console.log(`Swapping ${amountInUnits} of coin ${sellToken.id} through ${ethAmountOut} ETH to minimum ${minAmountOut} of coin ${buyToken.id}`);
             
             // Create the multicall data for coin-to-coin swap via ETH
             const multicallData = createCoinSwapMulticall(
@@ -1787,12 +1700,6 @@ export const SwapTile = () => {
             );
             
             // Log the calls we're making for debugging
-            console.log("Executing multicall with the following operations:");
-            console.log(`1. Swap ${formatUnits(amountInUnits, 18)} ${sellToken.symbol} → ETH`);
-            console.log(`2. Swap ~${formatEther(ethAmountOut)} ETH → min ${formatUnits(minAmountOut, 18)} ${buyToken.symbol}`);
-            console.log(`3. Recover any leftover ${sellToken.symbol} to ${address} (unlikely)`);
-            console.log(`4. Recover any leftover ETH to ${address} (expected)`);
-            console.log(`5. Recover any excess ${buyToken.symbol} to ${address} (safety measure)`);
             
             // Execute the multicall transaction
             const hash = await writeContractAsync({
@@ -1802,7 +1709,6 @@ export const SwapTile = () => {
               args: [multicallData],
             });
             
-            console.log(`Transaction hash: ${hash}`);
             setTxHash(hash);
             return;
           } catch (err) {

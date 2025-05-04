@@ -22,7 +22,7 @@ interface ImageInputProps {
  * ImageInput – drag‑and‑drop image uploader built with **react‑dropzone**, **shadcn/ui**, and **Tailwind CSS**.
  *
  * ```tsx
- * <ImageInput onChange={(file) => console.log(file)} />
+ * <ImageInput onChange={(file) => handleImageChange(file)} />
  * ```
  */
 export default function ImageInput({

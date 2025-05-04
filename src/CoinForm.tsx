@@ -172,7 +172,7 @@ export function CoinForm({
     setErrorMessage(null);
 
     if (!address || !imageBuffer) {
-      console.error("Wallet not connected or image not uploaded");
+      // Error will be shown in UI
       setErrorMessage(!address ? "Wallet not connected" : "Please upload an image");
       return;
     }
@@ -240,7 +240,7 @@ export function CoinForm({
         }
       }
     } catch (pinataError) {
-      console.error("Error uploading to Pinata:", pinataError);
+      // Error will be shown in UI
       setErrorMessage("Failed to upload image to IPFS. Please try again.");
     }
   };
