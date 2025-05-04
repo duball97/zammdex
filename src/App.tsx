@@ -54,8 +54,8 @@ function App() {
   };
 
   return (
-    <main className="p-3 min-h-screen w-screen flex flex-col justify-center items-center">
-      <div>
+    <main className="p-2 sm:p-3 min-h-screen w-screen flex flex-col justify-center items-center">
+      <div className="w-full max-w-lg">
         <header className="flex justify-end w-full">
           <ConnectMenu />
         </header>
@@ -85,7 +85,9 @@ function App() {
                 </button>
               </div>
             </div>
-            <Coins />
+            <div className="w-full">
+              <Coins />
+            </div>
             <div className="main-menu">
               {/* <ConnectMenu /> */}
               <div className="flex justify-end items-end w-full">
