@@ -65,7 +65,6 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
         
         // Check if we have valid lockup data
         if (!lockup || !Array.isArray(lockup) || lockup.length < 6) {
-          console.warn("Invalid or empty lockup data returned");
           setIsLoading(false);
           return;
         }
@@ -83,7 +82,6 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
         
         // Verify we have a valid owner address
         if (!parsedLockup.owner || parsedLockup.owner === '0x0000000000000000000000000000000000000000') {
-          console.log("No valid lockup found for this coin");
           setIsLoading(false);
           return;
         }
