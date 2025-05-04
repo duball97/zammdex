@@ -62,9 +62,10 @@ export const TradeView = ({
         <h2 className="text-lg sm:text-xl font-semibold">
           {name} [{symbol}]
         </h2>
+        {/* Metadata like tokenId */}
         <p className="text-sm">ID: {tokenId.toString()}</p>
       </div>
-
+      {/* buy / sell form from previous answer */}
       <BuySell tokenId={tokenId} name={name} symbol={symbol} />
 
       {isOwner && (
