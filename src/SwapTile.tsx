@@ -672,7 +672,7 @@ const TokenSelector = ({
       {/* Selected token display with thumbnail */}
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50"
+        className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50 touch-manipulation"
       >
         <TokenImage token={selectedToken} />
         <div className="flex flex-col">
@@ -680,11 +680,11 @@ const TokenSelector = ({
             <span className="font-medium">{selectedToken.symbol}</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-xs font-medium text-gray-700">
+            <div className="text-xs font-medium text-gray-700 min-w-[50px] h-[14px]">
               {formatBalance(selectedToken)}
               {selectedToken.id === null && isEthBalanceFetching && 
                 <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
-            </span>
+            </div>
           </div>
         </div>
         <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
@@ -694,7 +694,7 @@ const TokenSelector = ({
       
       {/* Dropdown list with thumbnails */}
       {isOpen && (
-        <div className="absolute z-20 mt-1 w-64 max-h-96 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
+        <div className="absolute z-20 mt-1 w-[calc(100vw-40px)] sm:w-64 max-h-[60vh] sm:max-h-96 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
           {tokens.map((token) => {
             const isSelected = 
               (token.id === null && selectedValue === "eth") || 
@@ -737,7 +737,7 @@ const TokenSelector = ({
               <div 
                 key={token.id?.toString() ?? "eth"}
                 onClick={() => handleSelect(token)}
-                className={`flex items-center justify-between p-2 hover:bg-yellow-50 cursor-pointer ${
+                className={`flex items-center justify-between p-3 sm:p-2 hover:bg-yellow-50 cursor-pointer touch-manipulation ${
                   isSelected ? "bg-yellow-100" : ""
                 }`}
               >
@@ -750,12 +750,12 @@ const TokenSelector = ({
                     )}
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-sm font-medium">
+                <div className="text-right min-w-[60px]">
+                  <div className="text-sm font-medium h-[18px]">
                     {balance}
                     {token.id === null && isEthBalanceFetching && 
                       <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
-                  </span>
+                  </div>
                 </div>
               </div>
             );
@@ -1865,8 +1865,8 @@ export const SwapTile = () => {
 
   // Main UI
   return (
-    <Card className="w-lg p-6 border-2 border-yellow-100 shadow-md rounded-xl">
-      <CardContent className="p-1 flex flex-col space-y-1">
+    <Card className="w-full max-w-lg p-4 sm:p-6 border-2 border-yellow-100 shadow-md rounded-xl">
+      <CardContent className="p-0 sm:p-1 flex flex-col space-y-1">
         {/* Info showing token count */}
         <div className="text-xs text-gray-500 mb-2">
           Available tokens: {tokenCount} (ETH + {tokenCount - 1} coins, sorted by liquidity)
@@ -1877,17 +1877,17 @@ export const SwapTile = () => {
           <TabsList className="w-full bg-yellow-50 p-1 rounded-lg border border-yellow-100">
             <TabsTrigger 
               value="swap" 
-              className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+              className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
             >
               <ArrowDownUp className="h-4 w-4 mr-1" />
-              Swap
+              <span className="text-sm sm:text-base">Swap</span>
             </TabsTrigger>
             <TabsTrigger 
               value="liquidity" 
-              className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+              className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
             >
               <Plus className="h-4 w-4 mr-1" />
-              Liquidity
+              <span className="text-sm sm:text-base">Liquidity</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -1898,24 +1898,24 @@ export const SwapTile = () => {
             <TabsList className="w-full bg-yellow-50 p-1 rounded-lg border border-yellow-100">
               <TabsTrigger 
                 value="add" 
-                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                Add
+                <span className="text-xs sm:text-sm">Add</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="remove" 
-                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
               >
                 <Minus className="h-4 w-4 mr-1" />
-                Remove
+                <span className="text-xs sm:text-sm">Remove</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="single-eth" 
-                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
               >
                 <span className="text-xs font-medium mr-1">Ξ</span>
-                Single-ETH
+                <span className="text-xs sm:text-sm">Single-ETH</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -1940,7 +1940,7 @@ export const SwapTile = () => {
                     Balance: {formatUnits(lpTokenBalance, 18)}
                   </span>
                   <button
-                    className="text-xs bg-yellow-200 hover:bg-yellow-300 text-yellow-800 font-medium px-2 py-0.5 rounded"
+                    className="text-xs bg-yellow-200 hover:bg-yellow-300 text-yellow-800 font-medium px-3 py-1.5 rounded touch-manipulation min-w-[50px]"
                     onClick={() => syncFromSell(formatUnits(lpTokenBalance, 18))}
                   >
                     MAX
@@ -1949,12 +1949,13 @@ export const SwapTile = () => {
               </div>
               <input
                 type="number"
+                inputMode="decimal"
                 min="0"
                 step="any"
                 placeholder="0.0"
                 value={lpBurnAmount}
                 onChange={(e) => syncFromSell(e.target.value)}
-                className="text-xl font-medium w-full bg-yellow-50 focus:outline-none"
+                className="text-lg sm:text-xl font-medium w-full bg-yellow-50 focus:outline-none h-10 text-right pr-1"
               />
               <div className="text-xs text-yellow-600 mt-1">
                 Enter the amount of LP tokens you want to burn to receive ETH and tokens back.
@@ -1983,10 +1984,10 @@ export const SwapTile = () => {
                   </div>
                   <div className="flex flex-col">
                     <span className="font-medium">ETH</span>
-                    <span className="text-xs font-medium text-gray-700">
+                    <div className="text-xs font-medium text-gray-700 min-w-[50px] h-[14px]">
                       {sellToken.balance !== undefined ? formatEther(sellToken.balance) : '0'}
                       {isEthBalanceFetching && <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
-                    </span>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -2001,12 +2002,13 @@ export const SwapTile = () => {
             <div className="flex justify-between items-center">
               <input
                 type="number"
+                inputMode="decimal"
                 min="0"
                 step="any"
                 placeholder="0.0"
                 value={sellAmt}
                 onChange={(e) => syncFromSell(e.target.value)}
-                className="text-xl font-medium w-full focus:outline-none"
+                className="text-lg sm:text-xl font-medium w-full focus:outline-none h-10 text-right pr-1"
                 readOnly={mode === "liquidity" && liquidityMode === "remove"}
               />
               {mode === "liquidity" && liquidityMode === "remove" && (
@@ -2016,7 +2018,7 @@ export const SwapTile = () => {
               {sellToken.balance !== undefined && sellToken.balance > 0n && 
                (mode === "swap" || (mode === "liquidity" && (liquidityMode === "add" || liquidityMode === "single-eth"))) && (
                 <button
-                  className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-medium px-2 py-0.5 rounded"
+                  className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-medium px-3 py-1.5 rounded touch-manipulation min-w-[50px]"
                   onClick={() => {
                     // For ETH, leave a small amount for gas
                     if (sellToken.id === null) {
@@ -2038,12 +2040,12 @@ export const SwapTile = () => {
           {/* FLIP button - only shown in swap mode */}
           {mode === "swap" && (
             <button
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl 
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-3 rounded-full shadow-xl 
                 bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 active:scale-95 
-                focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all z-10"
+                focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all z-10 touch-manipulation"
               onClick={flipTokens}
             >
-              <ArrowDownUp className="h-4 w-4 text-white" />
+              <ArrowDownUp className="h-5 w-5 text-white" />
             </button>
           )}
 
@@ -2090,12 +2092,13 @@ export const SwapTile = () => {
               <div className="flex justify-between items-center">
                 <input
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step="any"
                   placeholder="0.0"
                   value={buyAmt}
                   onChange={(e) => syncFromBuy(e.target.value)}
-                  className="text-xl font-medium w-full focus:outline-none"
+                  className="text-lg sm:text-xl font-medium w-full focus:outline-none h-10 text-right pr-1"
                   readOnly={mode === "liquidity" && liquidityMode === "remove"}
                 />
                 {mode === "liquidity" && liquidityMode === "remove" && (
@@ -2182,7 +2185,7 @@ export const SwapTile = () => {
             (mode === "liquidity" && liquidityMode === "single-eth" && (!canSwap || !sellAmt || !reserves)) ||
             isPending
           }
-          className="w-full text-lg mt-4"
+          className="w-full text-base sm:text-lg mt-4 h-12 touch-manipulation"
         >
           {isPending ? (
             <span className="flex items-center gap-2">
