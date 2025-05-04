@@ -22,11 +22,12 @@ import {
 import { CoinsAbi, CoinsAddress } from "./constants/Coins";
 import { ZAAMAbi, ZAAMAddress } from "./constants/ZAAM";
 import { ZAMMHelperAbi, ZAMMHelperAddress } from "./constants/ZAMMHelper";
+import { ZAMMSingleLiqETHAbi, ZAMMSingleLiqETHAddress } from "./constants/ZAMMSingleLiqETH";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ArrowDownUp, Plus, Minus } from "lucide-react";
+import { Loader2, ArrowDownUp, Plus, Minus, Droplet } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
   CONSTANTS & HELPERS
@@ -769,7 +770,7 @@ const TokenSelector = ({
   Mode types and constants
 ──────────────────────────────────────────────────────────────────────────── */
 type TileMode = "swap" | "liquidity";
-type LiquidityMode = "add" | "remove";
+type LiquidityMode = "add" | "remove" | "single-eth";
 
 /* ────────────────────────────────────────────────────────────────────────────
   SwapTile main component
@@ -780,6 +781,34 @@ export const SwapTile = () => {
   const [buyToken, setBuyToken] = useState<TokenMeta | null>(null);
   const [mode, setMode] = useState<TileMode>("swap");
   const [liquidityMode, setLiquidityMode] = useState<LiquidityMode>("add");
+  
+  // Single-ETH estimation values
+  const [singleETHEstimatedCoin, setSingleETHEstimatedCoin] = useState<string>("");
+  
+  // When switching to single-eth mode, ensure ETH is selected as the sell token 
+  // and set a default target token if none is selected
+  useEffect(() => {
+    if (mode === "liquidity" && liquidityMode === "single-eth") {
+      // If current sell token is not ETH, set it to ETH
+      if (sellToken.id !== null) {
+        const ethToken = tokens.find(token => token.id === null);
+        if (ethToken) {
+          console.log("Switching to ETH as sell token for Single-ETH mode");
+          setSellToken(ethToken);
+        }
+      }
+      
+      // If no target token is selected or it's ETH, set a default non-ETH token
+      if (!buyToken || buyToken.id === null) {
+        // Find the first non-ETH token with the highest liquidity
+        const defaultTarget = tokens.find(token => token.id !== null);
+        if (defaultTarget) {
+          console.log("Setting default target token for Single-ETH mode:", defaultTarget.symbol);
+          setBuyToken(defaultTarget);
+        }
+      }
+    }
+  }, [mode, liquidityMode, sellToken.id, buyToken, tokens]);
   const [lpTokenBalance, setLpTokenBalance] = useState<bigint>(0n);
   const [lpBurnAmount, setLpBurnAmount] = useState<string>("");
   
@@ -1093,6 +1122,71 @@ export const SwapTile = () => {
       return;
     }
     
+    // Single-ETH liquidity mode - estimate the token amount the user will get
+    if (mode === "liquidity" && liquidityMode === "single-eth") {
+      setSellAmt(val);
+      if (!reserves || !val || !buyToken || buyToken.id === null) {
+        setSingleETHEstimatedCoin("");
+        return;
+      }
+      
+      try {
+        // Get the pool ID for the selected token pair
+        const poolId = computePoolId(buyToken.id);
+        
+        // Fetch fresh reserves for the selected token
+        let targetReserves = { ...reserves };
+        
+        // If the token ID is different from the current reserves, fetch new reserves
+        if (buyToken.id !== coinId) {
+          try {
+            const result = await publicClient?.readContract({
+              address: ZAAMAddress,
+              abi: ZAAMAbi,
+              functionName: "pools",
+              args: [poolId],
+            });
+            
+            // If we have a result, use it; otherwise fall back to current reserves
+            if (result) {
+              const poolData = result as unknown as readonly bigint[];
+              targetReserves = {
+                reserve0: poolData[0],
+                reserve1: poolData[1]
+              };
+            }
+          } catch (err) {
+            console.error(`Failed to fetch reserves for target token ${buyToken.id}:`, err);
+            // Continue with existing reserves as fallback
+          }
+        }
+        
+        // The contract will use half of the ETH to swap for tokens
+        const halfEthAmount = parseEther(val || "0") / 2n;
+        
+        // Estimate how many tokens we'll get for half the ETH
+        const estimatedTokens = getAmountOut(
+          halfEthAmount,
+          targetReserves.reserve0,
+          targetReserves.reserve1,
+          SWAP_FEE,
+        );
+        
+        // Update the estimated coin display
+        if (estimatedTokens === 0n) {
+          setSingleETHEstimatedCoin("");
+        } else {
+          const formattedTokens = formatUnits(estimatedTokens, 18);
+          setSingleETHEstimatedCoin(formattedTokens);
+          console.log(`Single-ETH mode: ${val} ETH will yield approximately ${formattedTokens} ${buyToken.symbol}`);
+        }
+      } catch (err) {
+        console.error("Error estimating Single-ETH token amount:", err);
+        setSingleETHEstimatedCoin("");
+      }
+      return;
+    }
+    
     // Regular Add Liquidity or Swap mode
     setSellAmt(val);
     if (!canSwap || !reserves) return setBuyAmt("");
@@ -1192,6 +1286,118 @@ export const SwapTile = () => {
 
   /* perform swap */
   const nowSec = () => BigInt(Math.floor(Date.now() / 1000));
+  
+  // Execute Single-Sided ETH Liquidity Provision
+  const executeSingleETHLiquidity = async () => {
+    // Validate inputs
+    if (!address || !publicClient || !buyToken?.id) {
+      setTxError("Missing required data for transaction");
+      return;
+    }
+    
+    if (!sellAmt || parseFloat(sellAmt) <= 0) {
+      setTxError("Please enter a valid ETH amount");
+      return;
+    }
+    
+    setTxError(null);
+    
+    try {
+      // Check if we're on mainnet
+      if (chainId !== mainnet.id) {
+        console.log("Not on Ethereum mainnet. Current chainId:", chainId);
+        setTxError("Please connect to Ethereum mainnet to perform this action");
+        return;
+      }
+      
+      // Use the selected buyToken's ID to compute the pool key
+      const targetPoolKey = computePoolKey(buyToken.id);
+      const deadline = nowSec() + BigInt(DEADLINE_SEC);
+      const ethAmount = parseEther(sellAmt);
+      
+      // Get the reserves for the selected token
+      let targetReserves = reserves;
+      
+      // If buyToken.id is different from coinId, fetch the correct reserves
+      if (buyToken.id !== coinId) {
+        try {
+          // Get the pool ID for the target token
+          const targetPoolId = computePoolId(buyToken.id);
+          
+          const result = await publicClient.readContract({
+            address: ZAAMAddress,
+            abi: ZAAMAbi,
+            functionName: "pools",
+            args: [targetPoolId],
+          });
+          
+          const poolData = result as unknown as readonly bigint[];
+          targetReserves = {
+            reserve0: poolData[0],
+            reserve1: poolData[1]
+          };
+          
+          console.log(`Fetched reserves for ${buyToken.symbol}: ${formatEther(targetReserves.reserve0)} ETH, ${formatUnits(targetReserves.reserve1, 18)} tokens`);
+        } catch (err) {
+          console.error(`Failed to fetch reserves for ${buyToken.symbol}:`, err);
+          setTxError(`Failed to get pool data for ${buyToken.symbol}. Please try again.`);
+          return;
+        }
+      }
+      
+      if (!targetReserves || targetReserves.reserve0 === 0n || targetReserves.reserve1 === 0n) {
+        setTxError(`No liquidity available for ${buyToken.symbol}. Please select another token.`);
+        return;
+      }
+      
+      // Half of the ETH will be swapped to tokens by the contract
+      const halfEthAmount = ethAmount / 2n;
+      
+      // Estimate how many tokens we'll get for half the ETH
+      const estimatedTokens = getAmountOut(
+        halfEthAmount,
+        targetReserves.reserve0,
+        targetReserves.reserve1,
+        SWAP_FEE,
+      );
+      
+      // Apply slippage tolerance to the token amount
+      const minTokenAmount = withSlippage(estimatedTokens);
+      
+      // Min amounts for the addLiquidity portion
+      const amount0Min = withSlippage(halfEthAmount);
+      const amount1Min = withSlippage(estimatedTokens);
+      
+      console.log(`Single-sided ETH liquidity for ${buyToken.symbol}: ${formatEther(ethAmount)} ETH`);
+      console.log(`Expected tokens (half ETH swapped): ~${formatUnits(estimatedTokens, 18)} ${buyToken.symbol}`);
+      console.log(`Min amounts - Swap: ${formatUnits(minTokenAmount, 18)} ${buyToken.symbol}, Add: ${formatEther(amount0Min)} ETH, ${formatUnits(amount1Min, 18)} ${buyToken.symbol}`);
+      
+      // Call addSingleLiqETH on the ZAMMSingleLiqETH contract
+      const hash = await writeContractAsync({
+        address: ZAMMSingleLiqETHAddress,
+        abi: ZAMMSingleLiqETHAbi,
+        functionName: "addSingleLiqETH",
+        args: [
+          targetPoolKey,
+          minTokenAmount, // Minimum tokens from swap
+          amount0Min,     // Minimum ETH for liquidity
+          amount1Min,     // Minimum tokens for liquidity
+          address,        // LP tokens receiver
+          deadline,
+        ],
+        value: ethAmount, // Send the full ETH amount
+      });
+      
+      setTxHash(hash);
+    } catch (err) {
+      // Use our utility to handle wallet errors
+      const errorMsg = handleWalletError(err);
+      if (errorMsg) {
+        console.error("Single-sided ETH liquidity execution error:", err);
+        setTxError(errorMsg);
+      }
+    }
+  };
   
   const executeRemoveLiquidity = async () => {
     // Validate inputs
@@ -1503,7 +1709,6 @@ export const SwapTile = () => {
               abi: CoinsAbi,
               functionName: "setOperator",
               args: [ZAAMAddress, true],
-              chainId: mainnet.id,
             });
             
             // Show a waiting message
@@ -1682,10 +1887,39 @@ export const SwapTile = () => {
               className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
             >
               <Plus className="h-4 w-4 mr-1" />
-              Add Liquidity
+              Liquidity
             </TabsTrigger>
           </TabsList>
         </Tabs>
+        
+        {/* Liquidity mode tabs - only show when in liquidity mode */}
+        {mode === "liquidity" && (
+          <Tabs value={liquidityMode} onValueChange={(value) => setLiquidityMode(value as LiquidityMode)} className="mb-2">
+            <TabsList className="w-full bg-yellow-50 p-1 rounded-lg border border-yellow-100">
+              <TabsTrigger 
+                value="add" 
+                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </TabsTrigger>
+              <TabsTrigger 
+                value="remove" 
+                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+              >
+                <Minus className="h-4 w-4 mr-1" />
+                Remove
+              </TabsTrigger>
+              <TabsTrigger 
+                value="single-eth" 
+                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm"
+              >
+                <Droplet className="h-4 w-4 mr-1" />
+                Single-ETH
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
         
         {/* Load error notification */}
         {loadError && (
@@ -1734,14 +1968,31 @@ export const SwapTile = () => {
               <span className="text-sm text-muted-foreground">
                 {mode === "swap" ? "Sell" : 
                   liquidityMode === "add" ? "Provide" : 
-                  "You'll Receive (ETH)"}
+                  liquidityMode === "remove" ? "You'll Receive (ETH)" :
+                  "Provide ETH"}
               </span>
-              <TokenSelector
-                selectedToken={sellToken}
-                tokens={tokens}
-                onSelect={handleSellTokenSelect}
-                isEthBalanceFetching={isEthBalanceFetching}
-              />
+              {/* Hide token selector in single-eth mode since only ETH is allowed */}
+              {mode === "liquidity" && liquidityMode === "single-eth" ? (
+                <div className="flex items-center gap-2 bg-transparent border border-yellow-200 rounded-md px-2 py-1">
+                  <div className="w-8 h-8 flex bg-black text-white justify-center items-center rounded-full text-xs font-medium">
+                    ET
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-medium">ETH</span>
+                    <span className="text-xs font-medium text-gray-700">
+                      {sellToken.balance !== undefined ? formatEther(sellToken.balance) : '0'}
+                      {isEthBalanceFetching && <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <TokenSelector
+                  selectedToken={sellToken}
+                  tokens={tokens}
+                  onSelect={handleSellTokenSelect}
+                  isEthBalanceFetching={isEthBalanceFetching}
+                />
+              )}
             </div>
             <div className="flex justify-between items-center">
               <input
@@ -1781,20 +2032,57 @@ export const SwapTile = () => {
           
           {/* FLIP/PLUS/MINUS button */}
           <button
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 active:scale-95 transition-all z-10"
-            onClick={mode === "swap" ? flipTokens : () => setLiquidityMode(liquidityMode === "add" ? "remove" : "add")}
+            className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 rounded-full shadow-xl 
+              ${mode === "liquidity" && liquidityMode === "single-eth" 
+                  ? "bg-yellow-300 cursor-not-allowed" // disabled in single-eth mode
+                  : "bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 active:scale-95"} 
+              focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all z-10`}
+            onClick={
+              mode === "swap" 
+                ? flipTokens 
+                : (liquidityMode === "single-eth" 
+                    ? undefined // do nothing in single-eth mode 
+                    : () => setLiquidityMode(liquidityMode === "add" ? "remove" : "add"))
+            }
+            disabled={mode === "liquidity" && liquidityMode === "single-eth"}
           >
             {mode === "swap" ? (
               <ArrowDownUp className="h-4 w-4 text-white" />
             ) : liquidityMode === "add" ? (
               <Plus className="h-4 w-4 text-white" />
-            ) : (
+            ) : liquidityMode === "remove" ? (
               <Minus className="h-4 w-4 text-white" />
+            ) : (
+              <Droplet className="h-4 w-4 text-white" />
             )}
           </button>
 
-          {/* BUY/RECEIVE panel */}
-          {buyToken && (
+          {/* BUY/RECEIVE panel - Enhanced for Single-ETH mode with token selector */}
+          {buyToken && mode === "liquidity" && liquidityMode === "single-eth" && (
+            <div className="border-2 border-yellow-300 group rounded-b-2xl p-2 pt-3 focus-within:ring-2 hover:bg-yellow-50 focus-within:ring-primary flex flex-col gap-2 mt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Target Token</span>
+                <TokenSelector
+                  selectedToken={buyToken}
+                  tokens={tokens.filter(token => token.id !== null)} // Filter out ETH from the selector options
+                  onSelect={handleBuyTokenSelect}
+                  isEthBalanceFetching={isEthBalanceFetching}
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="text-xl font-medium w-full">
+                  {singleETHEstimatedCoin || "0"}
+                </div>
+                <span className="text-xs text-yellow-600 font-medium">Estimated</span>
+              </div>
+              <div className="text-xs text-yellow-600 mt-1">
+                Half of your ETH will be swapped for {buyToken.symbol} and paired with the remaining ETH.
+              </div>
+            </div>
+          )}
+          
+          {/* Standard BUY/RECEIVE panel - only show in swap mode or regular add/remove liquidity */}
+          {buyToken && !(mode === "liquidity" && liquidityMode === "single-eth") && (
             <div className="border-2 border-yellow-300 group rounded-b-2xl p-2 pt-3 focus-within:ring-2 hover:bg-yellow-50 focus-within:ring-primary flex flex-col gap-2 mt-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
@@ -1847,13 +2135,23 @@ export const SwapTile = () => {
                   <li>Withdraw your liquidity anytime</li>
                 </ul>
               </>
-            ) : (
+            ) : liquidityMode === "remove" ? (
               <>
                 <p className="font-medium mb-1">Remove Liquidity:</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li>Your LP balance: {formatUnits(lpTokenBalance, 18)} LP tokens</li>
                   <li>Enter amount of LP tokens to burn</li>
                   <li>Preview shows expected return of ETH and tokens</li>
+                </ul>
+              </>
+            ) : (
+              <>
+                <p className="font-medium mb-1">Single-Sided ETH Liquidity:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Provide only ETH to participate in a pool</li>
+                  <li>Half your ETH is swapped to tokens automatically</li>
+                  <li>Remaining ETH + tokens are added as liquidity</li>
+                  <li>Earn {Number(SWAP_FEE) / 100}% fees from trades</li>
                 </ul>
               </>
             )}
@@ -1882,13 +2180,16 @@ export const SwapTile = () => {
               ? executeSwap 
               : liquidityMode === "add" 
                 ? executeAddLiquidity 
-                : executeRemoveLiquidity
+                : liquidityMode === "remove"
+                  ? executeRemoveLiquidity
+                  : executeSingleETHLiquidity // Single-ETH mode
           }
           disabled={
             !isConnected || 
             (mode === "swap" && (!canSwap || !sellAmt)) ||
             (mode === "liquidity" && liquidityMode === "add" && (!canSwap || !sellAmt)) ||
             (mode === "liquidity" && liquidityMode === "remove" && (!lpBurnAmount || parseFloat(lpBurnAmount) <= 0 || parseUnits(lpBurnAmount || "0", 18) > lpTokenBalance)) ||
+            (mode === "liquidity" && liquidityMode === "single-eth" && (!canSwap || !sellAmt || !reserves)) ||
             isPending
           }
           className="w-full text-lg mt-4"
@@ -1900,14 +2201,18 @@ export const SwapTile = () => {
                 ? "Swapping…" 
                 : liquidityMode === "add" 
                   ? "Adding Liquidity…" 
-                  : "Removing Liquidity…"
+                  : liquidityMode === "remove"
+                    ? "Removing Liquidity…"
+                    : "Adding Single-ETH Liquidity…"
               }
             </span>
           ) : mode === "swap" 
             ? "Swap" 
             : liquidityMode === "add" 
               ? "Add Liquidity" 
-              : "Remove Liquidity"
+              : liquidityMode === "remove"
+                ? "Remove Liquidity"
+                : "Add Single-ETH Liquidity"
           }
         </Button>
 
