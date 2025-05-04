@@ -1142,7 +1142,7 @@ export const SwapTile = () => {
           const { estimateCoinToCoinOutput } = await import('./lib/swapHelper');
           
           const inUnits = parseUnits(val || "0", 18);
-          const { amountOut, ethAmountOut } = estimateCoinToCoinOutput(
+          const { amountOut } = estimateCoinToCoinOutput(
             sellToken.id,
             buyToken.id,
             inUnits,
@@ -1442,9 +1442,7 @@ export const SwapTile = () => {
         return;
       }
       
-      // Calculate minimum amounts with slippage protection
-      const amount0Min = withSlippage(amount0);
-      const amount1Min = withSlippage(amount1);
+      // Slippage protection will be calculated after getting exact amounts from ZAMMHelper
       
       // Check if the user needs to approve ZAMM as operator for their Coin token
       // This is needed when the user is providing Coin tokens (not just ETH)
