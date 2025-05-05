@@ -1,88 +1,82 @@
-import { useEffect, useState } from "react";
-import { useReadContract, usePublicClient } from "wagmi";
-import { CoinchanAddress, CoinchanAbi } from "./constants/Coinchan";
+import { useState } from "react";
 import { ExplorerGrid } from "./ExplorerGrid";
 import { TradeView } from "./TradeView";
+import { usePagedCoins } from "./hooks/metadata";
 
-const PAGE_SIZE = 20; // put this near your other constants
+// Page size for pagination
+const PAGE_SIZE = 20;
 
 export const Coins = () => {
-  const publicClient = usePublicClient({ chainId: 1 });
-
-  // ──────────────────────── on-chain counts ────────────────────────
-  const { data: totalCoins } = useReadContract({
-    address: CoinchanAddress,
-    abi: CoinchanAbi,
-    functionName: "getCoinsCount",
-    chainId: 1,
-  }); // BigInt | undefined
-
-  // ───────────────────────── paging state ──────────────────────────
-  const [page, setPage] = useState(0); // 0-based page index
-
-  // Derived numbers (always kept in-sync)
-  const total = Number(totalCoins ?? 0);
-  const offset = page * PAGE_SIZE; // first index on this page
-  const end = Math.min(offset + PAGE_SIZE, total); // **exclusive**
-
-  const canPrev = page > 0;
-  const canNext = end < total;
-
-  // If the on-chain count shrinks, snap back to the last valid page
-  useEffect(() => {
-    if (offset >= total && total > 0) {
-      setPage(Math.floor((total - 1) / PAGE_SIZE));
-    }
-  }, [total, offset]);
-
-  // ───────────────────────── fetch IDs ─────────────────────────────
-  const [coins, setCoins] = useState<bigint[]>([]);
-
-  useEffect(() => {
-    if (!totalCoins) return;
-
-    let cancelled = false;
-
-    (async () => {
-      const fetched = await publicClient.readContract({
-        address: CoinchanAddress,
-        abi: CoinchanAbi,
-        functionName: "getCoins", // (start, endExclusive)
-        args: [BigInt(offset), BigInt(end)],
-      });
-
-      if (!cancelled) setCoins(fetched as bigint[]);
-    })();
-
-    return () => {
-      cancelled = true; // avoid setting state on unmount
-    };
-  }, [offset, end, totalCoins, publicClient]);
-
-  // ─── NEW: which coin is being traded? ───────────────────────────
+  // Use our new paged coins hook for efficient data fetching
+  const {
+    coins,
+    total,
+    page,
+    totalPages,
+    hasNextPage,
+    hasPreviousPage,
+    goToNextPage,
+    goToPreviousPage,
+    isLoading
+  } = usePagedCoins(PAGE_SIZE);
+  
+  // Which coin is being traded
   const [selectedTokenId, setSelectedTokenId] = useState<bigint | null>(null);
-
-  // ─── event handlers ─────────────────────────────────────────────
+  
+  // Event handlers
   const openTrade = (id: bigint) => setSelectedTokenId(id);
   const closeTrade = () => setSelectedTokenId(null);
-
-  // ─── render ─────────────────────────────────────────────────────
+  
+  // If a token is selected, show the trade view
   if (selectedTokenId !== null) {
-    // full-page trade UI
     return <TradeView tokenId={selectedTokenId} onBack={closeTrade} />;
   }
-
-  // explorer grid (default)
+  
+  // Calculate offset for display purposes
+  const offset = page * PAGE_SIZE;
+  
+  // Log data to help with debugging
+  console.log(`Coins component rendering: ${coins.length} coins on page ${page + 1} of ${totalPages}`);
+  
+  // Check if we have metadata in the coins
+  const coinsWithMetadata = coins.filter(coin => coin.metadata !== null).length;
+  const coinsWithImages = coins.filter(coin => coin.imageUrl !== null).length;
+  console.log(`Coins with metadata: ${coinsWithMetadata}/${coins.length}, Coins with images: ${coinsWithImages}/${coins.length}`);
+  
+  // Log the first coin data to help debug
+  if (coins.length > 0) {
+    console.log('First coin data:', {
+      coinId: coins[0].coinId.toString(),
+      tokenURI: coins[0].tokenURI,
+      name: coins[0].name,
+      symbol: coins[0].symbol,
+      hasMetadata: coins[0].metadata !== null,
+      hasImage: coins[0].imageUrl !== null,
+      imageUrl: coins[0].imageUrl,
+    });
+  }
+  
+  // Show the explorer grid
   return (
-    <ExplorerGrid
-      coins={coins}
-      total={Number(totalCoins ?? 0)}
-      canPrev={canPrev}
-      canNext={canNext}
-      onPrev={() => canPrev && setPage((p) => p - 1)}
-      onNext={() => canNext && setPage((p) => p + 1)}
-      onTrade={openTrade} // 🔑 pass handler down
-    />
+    <>
+      <div className="text-sm text-gray-500 mb-2">
+        Page {page + 1} of {totalPages} • 
+        Showing items {offset + 1}-{Math.min(offset + coins.length, total)} of {total}
+      </div>
+      
+      <ExplorerGrid
+        coins={coins}
+        total={total}
+        canPrev={hasPreviousPage}
+        canNext={hasNextPage}
+        onPrev={goToPreviousPage}
+        onNext={goToNextPage}
+        onTrade={openTrade}
+        isLoading={isLoading}
+        currentPage={page + 1}
+        totalPages={totalPages}
+      />
+    </>
   );
 };
 
