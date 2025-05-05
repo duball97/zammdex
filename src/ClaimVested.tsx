@@ -26,7 +26,7 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
   const publicClient = usePublicClient({ chainId: mainnet.id });
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
-  
+
   // State
   const [lockupInfo, setLockupInfo] = useState<{
     owner: string;
@@ -37,23 +37,22 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
     claimed: bigint;
   } | null>(null);
   const [vestableAmount, setVestableAmount] = useState<bigint>(0n);
-  const [isOwner, setIsOwner] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [txError, setTxError] = useState<string | null>(null);
-  
+
   // Contract write state
   const { writeContractAsync, isPending } = useWriteContract();
   const [txHash, setTxHash] = useState<`0x${string}`>();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
-  
+
   // Fetch lockup information and vestable amount
   useEffect(() => {
     const fetchLockupInfo = async () => {
       if (!publicClient || !coinId) return;
-      
+
       setIsLoading(true);
       setTxError(null);
-      
+
       try {
         // Fetch lockup information
         const lockup = await publicClient.readContract({
@@ -62,13 +61,13 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
           functionName: "lockups",
           args: [coinId],
         }) as any;
-        
+
         // Check if we have valid lockup data
         if (!lockup || !Array.isArray(lockup) || lockup.length < 6) {
           setIsLoading(false);
           return;
         }
-        
+
         // Parse the lockup info from the returned array
         // The struct fields are: owner, creation, unlock, vesting, swapFee, claimed
         const parsedLockup = {
@@ -79,16 +78,15 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
           swapFee: BigInt(lockup[4]),  // Ensure BigInt
           claimed: BigInt(lockup[5]),  // Ensure BigInt
         };
-        
+
         // Verify we have a valid owner address
         if (!parsedLockup.owner || parsedLockup.owner === '0x0000000000000000000000000000000000000000') {
           setIsLoading(false);
           return;
         }
-        
+
         setLockupInfo(parsedLockup);
-        setIsOwner(address?.toLowerCase() === parsedLockup.owner.toLowerCase());
-        
+
         // Fetch vestable amount
         const vestable = await publicClient.readContract({
           address: CoinchanAddress,
@@ -96,7 +94,7 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
           functionName: "getVestableAmount",
           args: [coinId],
         }) as bigint;
-        
+
         setVestableAmount(BigInt(vestable)); // Ensure BigInt
       } catch (err) {
         console.error("Error fetching lockup information:", err);
@@ -105,50 +103,50 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
         setIsLoading(false);
       }
     };
-    
+
     fetchLockupInfo();
   }, [publicClient, coinId, address, isSuccess]);
-  
+
   // Calculate vesting percentage
   const calculateVestingPercentage = (): number => {
     if (!lockupInfo) return 0;
-    
+
     const totalDuration = Number(lockupInfo.unlock - lockupInfo.creation);
     const currentTime = BigInt(Math.floor(Date.now() / 1000));
     const elapsed = Math.min(
       Number(currentTime - lockupInfo.creation),
       totalDuration
     );
-    
+
     return (elapsed / totalDuration) * 100;
   };
-  
+
   // Format time remaining until unlock
   const formatTimeRemaining = (): string => {
     if (!lockupInfo) return "";
-    
+
     const now = BigInt(Math.floor(Date.now() / 1000));
-    
+
     // If already unlocked
     if (now >= lockupInfo.unlock) {
       return "Fully unlocked";
     }
-    
+
     // Ensure we're using proper BigInt conversion
     const secondsRemaining = Number(lockupInfo.unlock - now);
     const days = Math.floor(secondsRemaining / 86400);
     const hours = Math.floor((secondsRemaining % 86400) / 3600);
     const minutes = Math.floor((secondsRemaining % 3600) / 60);
-    
+
     return `${days}d ${hours}h ${minutes}m remaining`;
   };
-  
+
   // Handle claim vested tokens
   const handleClaimVested = async () => {
-    if (!isConnected || !coinId || !isOwner) return;
-    
+    if (!isConnected || !coinId) return;
+
     setTxError(null);
-    
+
     try {
       // Switch to mainnet if needed
       if (chainId !== mainnet.id) {
@@ -163,7 +161,7 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
           return;
         }
       }
-      
+
       // Call the claimVested function
       const hash = await writeContractAsync({
         address: CoinchanAddress,
@@ -172,7 +170,7 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
         args: [coinId],
         chainId: mainnet.id,
       });
-      
+
       setTxHash(hash);
     } catch (err) {
       // Check for user rejection first
@@ -180,7 +178,7 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
         // Silent handling - don't show error for user rejections
         return;
       }
-      
+
       // For contract errors, we still want to show specific messages
       if (err instanceof Error) {
         if (err.message.includes("Pending")) {
@@ -199,7 +197,7 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
       }
     }
   };
-  
+
   // If loading or no coin ID, show loading state
   if (isLoading) {
     return (
@@ -210,17 +208,17 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
       </Card>
     );
   }
-  
+
   // If no lockup exists or it's not a vesting lockup, don't show this component
   if (!lockupInfo || (!lockupInfo.vesting && BigInt(Math.floor(Date.now() / 1000)) < lockupInfo.unlock)) {
     return null;
   }
-  
+
   return (
     <Card className="w-full p-4 border-2 border-yellow-200 shadow-md rounded-xl">
       <CardContent className="p-2">
         <h3 className="text-lg font-bold mb-2 text-yellow-800">Liquidity Vesting</h3>
-        
+
         {/* Vesting progress */}
         <div className="mb-4">
           <div className="flex justify-between text-xs mb-1">
@@ -228,8 +226,8 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
             <span>{calculateVestingPercentage().toFixed(2)}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-yellow-500 h-2 rounded-full" 
+            <div
+              className="bg-yellow-500 h-2 rounded-full"
               style={{ width: `${calculateVestingPercentage()}%` }}
             ></div>
           </div>
@@ -237,7 +235,7 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
             {formatTimeRemaining()}
           </div>
         </div>
-        
+
         {/* Vestable amount */}
         <div className="mb-4 p-2 bg-yellow-50 rounded-lg">
           <div className="flex justify-between">
@@ -251,11 +249,11 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
             </div>
           )}
         </div>
-        
+
         {/* Claim button */}
         <Button
           onClick={handleClaimVested}
-          disabled={!isConnected || !isOwner || vestableAmount === 0n || isPending}
+          disabled={!isConnected || vestableAmount === 0n || isPending}
           className="w-full bg-yellow-500 hover:bg-yellow-600"
         >
           {isPending ? (
@@ -265,23 +263,16 @@ export const ClaimVested = ({ coinId }: ClaimVestedProps) => {
             </span>
           ) : "Claim Vested LP Tokens"}
         </Button>
-        
+
         {/* Error message */}
         {txError && (
           <div className="mt-2 text-xs text-red-600">{txError}</div>
         )}
-        
+
         {/* Success message */}
         {isSuccess && (
           <div className="mt-2 text-xs text-green-600">
             Successfully claimed tokens!
-          </div>
-        )}
-        
-        {/* Info for non-owners */}
-        {!isOwner && (
-          <div className="mt-2 text-xs text-gray-600">
-            Only the creator can claim vested tokens.
           </div>
         )}
       </CardContent>
