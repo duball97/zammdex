@@ -17,6 +17,7 @@ import {
   encodeAbiParameters,
   parseAbiParameters,
 } from "viem";
+import { formatNumber } from "./lib/utils";
 import { CoinsAbi, CoinsAddress } from "./constants/Coins";
 import { ZAAMAbi, ZAAMAddress } from "./constants/ZAAM";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,23 @@ import { useCoinMeta } from "./hooks/use-coin-meta";
 import { DisplayTokenUri } from "./DisplayTokenUri";
 import { useQuery } from "@tanstack/react-query";
 import { handleWalletError } from "./utils";
+
+// CheckTheChain contract ABI for fetching ETH price
+const CheckTheChainAbi = [
+  {
+    inputs: [{ internalType: "string", name: "symbol", type: "string" }],
+    name: "checkPrice",
+    outputs: [
+      { internalType: "uint256", name: "price", type: "uint256" },
+      { internalType: "string", name: "priceStr", type: "string" }
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+// CheckTheChain contract address
+const CheckTheChainAddress = "0x0000000000cDC1F8d393415455E382c30FBc0a84";
 
 const SWAP_FEE = 100n; // 1 % pool fee
 const SLIPPAGE_BPS = 100n; // 100 basis points = 1 %
@@ -133,6 +151,19 @@ export const BuySell = ({
     query: {
       enabled: !!poolId,
       select: ([r0, r1]) => ({ reserve0: r0, reserve1: r1 }),
+    },
+  });
+  
+  // Fetch ETH price in USD from CheckTheChain
+  const { data: ethPriceData } = useReadContract({
+    address: CheckTheChainAddress,
+    abi: CheckTheChainAbi,
+    functionName: "checkPrice",
+    args: ["WETH"],
+    chainId: mainnet.id,
+    query: {
+      // Refresh every 60 seconds
+      staleTime: 60_000,
     },
   });
   const { data: balance } = useReadContract({
@@ -290,6 +321,48 @@ export const BuySell = ({
   const displayName = name !== "N/A" ? name : propName;
   const displaySymbol = symbol !== "N/A" ? symbol : propSymbol;
   
+  // Calculate market cap estimation (fixed supply: 21 million coins)
+  const FIXED_SUPPLY = 21_000_000;
+  
+  // Calculate market cap in ETH
+  const marketCapEth = useMemo(() => {
+    if (!reserves || reserves.reserve0 === 0n || reserves.reserve1 === 0n) return null;
+    
+    // For an x*y=k AMM, the spot price is determined by the ratio of reserves
+    // Price of token in ETH = reserve0 (ETH) / reserve1 (token)
+    const pricePerTokenEth = Number(formatEther(reserves.reserve0)) / Number(formatUnits(reserves.reserve1, 18));
+    
+    // Market cap = price per token * total supply
+    return pricePerTokenEth * FIXED_SUPPLY;
+  }, [reserves]);
+  
+  // Calculate market cap in USD
+  const marketCapUsd = useMemo(() => {
+    if (!marketCapEth || !ethPriceData) return null;
+    
+    // Log the data for debugging
+    console.log('ETH price data from CheckTheChain:', ethPriceData);
+    
+    // We need to check if ethPriceData is a tuple or just a string
+    // If the API changed, we need to handle both cases
+    let ethPriceUsd;
+    
+    if (Array.isArray(ethPriceData)) {
+      // Handle array response (tuple) - use the second element (priceStr)
+      const [, priceStr] = ethPriceData;
+      ethPriceUsd = parseFloat(priceStr);
+    } else {
+      // Handle direct string response
+      ethPriceUsd = parseFloat(ethPriceData);
+    }
+    
+    // Check if the parsing was successful
+    if (isNaN(ethPriceUsd)) return null;
+    
+    // Market cap in USD = market cap in ETH * ETH price in USD
+    return marketCapEth * ethPriceUsd;
+  }, [marketCapEth, ethPriceData]);
+  
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as "buy" | "sell")}>
       <div className="flex items-start gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
@@ -312,6 +385,23 @@ export const BuySell = ({
           ) : (
             <p className="text-sm text-gray-400 italic mt-1">No description available</p>
           )}
+          
+          {/* Market Cap Estimation */}
+          <div className="mt-2 text-xs text-gray-500">
+            {marketCapEth !== null && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-600">Est. Market Cap:</span>
+                <span>{formatNumber(marketCapEth, 2)} ETH</span>
+                {marketCapUsd !== null ? (
+                  <span className="ml-1">(~${formatNumber(marketCapUsd, 0)})</span>
+                ) : ethPriceData ? (
+                  <span className="ml-1 text-yellow-500">(USD price loading...)</span>
+                ) : (
+                  <span className="ml-1 text-yellow-500">(ETH price data unavailable)</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
       
