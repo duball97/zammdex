@@ -9,8 +9,8 @@ export const DisplayTokenUri = ({
   symbol: string;
   className?: string;
 }) => {
-  // Using imageLoaded in onLoad handler at line 156
-  const [imageLoaded, setImageLoaded] = useState(false);
+  // State to track when image has loaded
+  const [, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [actualImageUrl, setActualImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
