@@ -42,22 +42,40 @@ export const useCoinMeta = (tokenId: bigint): MetaState => {
         chainId: mainnet.id,
       },
     ],
-    // optional — keep the response fresh for 30 s, then refetch
     query: {
-      staleTime: 30_000,
-    },
+      // Improved caching strategy:
+      // - Metadata rarely changes, so we can cache it for much longer
+      // - 24 hours staleTime means we won't refetch unless explicitly invalidated
+      // - This significantly reduces network requests in the explorer grid
+      staleTime: 24 * 60 * 60 * 1000, // 24 hours
+      // Data is kept in cache for 7 days even when component unmounts
+      gcTime: 7 * 24 * 60 * 60 * 1000, // 7 days
+    }
   });
 
   // Parse once; components receive stable refs unless something changed
   return useMemo<MetaState>(() => {
     const [nameData, symbolData, uriData] = data || [];
-
+    
+    const name = (nameData?.result as string | undefined) ?? "N/A";
+    const symbol = (symbolData?.result as string | undefined) ?? "N/A";
+    const tokenUri = (uriData?.result as string | undefined) ?? "N/A";
+    
+    // Add debug logging to identify issues
+    console.log(`useCoinMeta for token ${tokenId.toString()}:`, {
+      name,
+      symbol,
+      tokenUri,
+      isLoading,
+      hasError: !!error
+    });
+    
     return {
-      name: (nameData?.result as string | undefined) ?? "N/A",
-      symbol: (symbolData?.result as string | undefined) ?? "N/A",
-      tokenUri: (uriData?.result as string | undefined) ?? "N/A",
+      name,
+      symbol,
+      tokenUri,
       isLoading,
       error: error as Error | undefined,
     };
-  }, [data, isLoading, error]);
+  }, [data, isLoading, error, tokenId]);
 };

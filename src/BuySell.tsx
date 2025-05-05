@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   useWriteContract,
   useWaitForTransactionReceipt,
@@ -12,10 +12,7 @@ import {
   parseUnits,
   formatEther,
   formatUnits,
-  keccak256,
   zeroAddress,
-  encodeAbiParameters,
-  parseAbiParameters,
 } from "viem";
 import { formatNumber } from "./lib/utils";
 import { CoinsAbi, CoinsAddress } from "./constants/Coins";
@@ -24,10 +21,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { mainnet } from "viem/chains";
-import { useCoinMeta } from "./hooks/use-coin-meta";
-import { DisplayTokenUri } from "./DisplayTokenUri";
-import { useQuery } from "@tanstack/react-query";
 import { handleWalletError } from "./utils";
+import { useCoinData } from "./hooks/metadata";
+import { formatImageURL, getAlternativeImageUrls } from "./hooks/metadata/use-global-coins-data";
 
 // CheckTheChain contract ABI for fetching ETH price
 const CheckTheChainAbi = [
@@ -70,16 +66,6 @@ const computePoolKey = (coinId: bigint): PoolKey => ({
   swapFee: SWAP_FEE,
 });
 
-const computePoolId = (key: PoolKey): `0x${string}` =>
-  keccak256(
-    encodeAbiParameters(
-      parseAbiParameters(
-        "uint256 id0, uint256 id1, address token0, address token1, uint96 swapFee",
-      ),
-      [key.id0, key.id1, key.token0, key.token1, key.swapFee],
-    ),
-  );
-
 // Unchanged getAmountOut from x*y invariants
 const getAmountOut = (
   amountIn: bigint,
@@ -113,46 +99,17 @@ export const BuySell = ({
   const { switchChain } = useSwitchChain();
   const chainId = useChainId();
   
-  // Fetch token metadata from blockchain
-  const { name, symbol, tokenUri } = useCoinMeta(tokenId);
+  // Fetch coin data using our new hook
+  const { coinData, marketCapEth, getDisplayValues } = useCoinData(tokenId);
   
-  // Fetch metadata description from token URI
-  const { data: tokenData } = useQuery({
-    queryKey: ["token-metadata", tokenUri],
-    enabled: !!(
-      tokenUri &&
-      (tokenUri.startsWith("http") || tokenUri.startsWith("ipfs://"))
-    ),
-    queryFn: async () => {
-      let uri;
-      if (tokenUri.startsWith("ipfs")) {
-        uri = `https://content.wrappr.wtf/ipfs/${tokenUri.slice(7)}`;
-      } else if (tokenUri.startsWith("http")) {
-        uri = tokenUri;
-      } else {
-        throw new Error("Invalid token URI");
-      }
-
-      const response = await fetch(uri);
-      const data = await response.json();
-      return data;
-    },
-  });
-
-  // fetch reserves
-  const poolKey = computePoolKey(tokenId);
-  const poolId = computePoolId(poolKey);
-  const { data: reserves } = useReadContract({
-    address: ZAAMAddress,
-    abi: ZAAMAbi,
-    functionName: "pools",
-    args: [BigInt(poolId)],
-    chainId: mainnet.id,
-    query: {
-      enabled: !!poolId,
-      select: ([r0, r1]) => ({ reserve0: r0, reserve1: r1 }),
-    },
-  });
+  // Get display values with fallbacks
+  const { name, symbol, description } = getDisplayValues();
+  
+  // We already have reserves in the coinData, no need for a separate fetch
+  const reserves = coinData ? {
+    reserve0: coinData.reserve0,
+    reserve1: coinData.reserve1
+  } : null;
   
   // Fetch ETH price in USD from CheckTheChain
   const { data: ethPriceData } = useReadContract({
@@ -166,6 +123,7 @@ export const BuySell = ({
       staleTime: 60_000,
     },
   });
+  
   const { data: balance } = useReadContract({
     address: CoinsAddress,
     abi: CoinsAbi,
@@ -173,6 +131,7 @@ export const BuySell = ({
     args: address ? [address, tokenId] : undefined,
     chainId: mainnet.id,
   });
+  
   // fetch allowance / operator state
   const { data: isOperator } = useReadContract({
     address: CoinsAddress,
@@ -186,7 +145,7 @@ export const BuySell = ({
 
   // calculate the slippage‐adjusted estimate shown in the UI
   const estimated = useMemo(() => {
-    if (!reserves) return "0";
+    if (!reserves || !reserves.reserve0 || !reserves.reserve1) return "0";
     try {
       if (tab === "buy") {
         const inWei = parseEther(amount || "0");
@@ -237,6 +196,7 @@ export const BuySell = ({
       const amountOutMin = withSlippage(rawOut);
       const deadline = nowSec() + BigInt(DEADLINE_SEC);
 
+      const poolKey = computePoolKey(tokenId);
       const hash = await writeContractAsync({
         address: ZAAMAddress,
         abi: ZAAMAbi,
@@ -300,6 +260,7 @@ export const BuySell = ({
       const amountOutMin = withSlippage(rawOut);
       const deadline = nowSec() + BigInt(DEADLINE_SEC);
 
+      const poolKey = computePoolKey(tokenId);
       const hash = await writeContractAsync({
         address: ZAAMAddress,
         abi: ZAAMAbi,
@@ -316,53 +277,116 @@ export const BuySell = ({
       }
     }
   };
-
-  // Use the name and symbol from blockchain if available, otherwise fall back to props
-  const displayName = name !== "N/A" ? name : propName;
-  const displaySymbol = symbol !== "N/A" ? symbol : propSymbol;
-  
-  // Calculate market cap estimation (fixed supply: 21 million coins)
-  const FIXED_SUPPLY = 21_000_000;
-  
-  // Calculate market cap in ETH
-  const marketCapEth = useMemo(() => {
-    if (!reserves || reserves.reserve0 === 0n || reserves.reserve1 === 0n) return null;
-    
-    // For an x*y=k AMM, the spot price is determined by the ratio of reserves
-    // Price of token in ETH = reserve0 (ETH) / reserve1 (token)
-    const pricePerTokenEth = Number(formatEther(reserves.reserve0)) / Number(formatUnits(reserves.reserve1, 18));
-    
-    // Market cap = price per token * total supply
-    return pricePerTokenEth * FIXED_SUPPLY;
-  }, [reserves]);
   
   // Calculate market cap in USD
   const marketCapUsd = useMemo(() => {
     if (!marketCapEth || !ethPriceData) return null;
     
-    // Log the data for debugging
-    console.log('ETH price data from CheckTheChain:', ethPriceData);
-    
-    // ethPriceData is a tuple [bigint, string] from CheckTheChain
-    // Extract the price string (second element of the tuple)
+    // Using the string representation as it's likely already in the correct format
     const priceStr = ethPriceData[1];
-    
-    // Parse the ETH price from the string
     const ethPriceUsd = parseFloat(priceStr);
     
     // Check if the parsing was successful
-    if (isNaN(ethPriceUsd)) return null;
+    if (isNaN(ethPriceUsd) || ethPriceUsd === 0) return null;
     
     // Market cap in USD = market cap in ETH * ETH price in USD
     return marketCapEth * ethPriceUsd;
   }, [marketCapEth, ethPriceData]);
   
+  // Use the display name and symbol 
+  const displayName = name || propName;
+  const displaySymbol = symbol || propSymbol;
+  
+  // State for tracking image loading and errors
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+  const alternativeUrlsRef = useRef<string[]>([]);
+  const attemptedUrlsRef = useRef<Set<string>>(new Set());
+  
+  // Determine the best image URL to use
+  useEffect(() => {
+    if (!coinData) return;
+    
+    let imageUrl = null;
+    let imageSourceForAlternatives = '';
+    setImageLoaded(false);
+    setImageError(false);
+    attemptedUrlsRef.current = new Set();
+    
+    // Try different sources in order of preference
+    if (coinData.imageUrl) {
+      imageUrl = coinData.imageUrl;
+      imageSourceForAlternatives = coinData.imageUrl;
+    } else if (coinData.metadata?.image) {
+      imageUrl = formatImageURL(coinData.metadata.image);
+      imageSourceForAlternatives = coinData.metadata.image;
+    } else if (coinData.metadata?.image_url) {
+      imageUrl = formatImageURL(coinData.metadata.image_url);
+      imageSourceForAlternatives = coinData.metadata.image_url;
+    } else if (coinData.metadata?.imageUrl) {
+      imageUrl = formatImageURL(coinData.metadata.imageUrl);
+      imageSourceForAlternatives = coinData.metadata.imageUrl;
+    }
+    
+    // Generate alternative URLs for fallback
+    if (imageSourceForAlternatives) {
+      alternativeUrlsRef.current = getAlternativeImageUrls(imageSourceForAlternatives);
+    } else {
+      alternativeUrlsRef.current = [];
+    }
+    
+    setCurrentImageUrl(imageUrl);
+    if (imageUrl) {
+      attemptedUrlsRef.current.add(imageUrl);
+    }
+  }, [coinData]);
+  
+  // Handle image load error with fallback attempt
+  const handleImageError = useCallback(() => {
+    console.error(`Image failed to load for coin ${tokenId.toString()}`);
+    
+    // Try next alternative URL if available
+    if (alternativeUrlsRef.current.length > 0) {
+      // Find the first URL we haven't tried yet
+      const nextUrl = alternativeUrlsRef.current.find(url => !attemptedUrlsRef.current.has(url));
+      
+      if (nextUrl) {
+        console.log(`Trying alternative URL: ${nextUrl}`);
+        attemptedUrlsRef.current.add(nextUrl);
+        setCurrentImageUrl(nextUrl);
+        // Don't set error yet, we're trying an alternative
+        return;
+      }
+    }
+    
+    // If we've exhausted all alternatives, mark as error
+    console.log(`No more alternative URLs to try for coin ${tokenId.toString()}`);
+    setImageError(true);
+  }, [tokenId]);
+
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as "buy" | "sell")}>
       <div className="flex items-start gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
         <div className="flex-shrink-0">
-          <div className="w-16 h-16">
-            <DisplayTokenUri tokenUri={tokenUri} symbol={displaySymbol} />
+          <div className="w-16 h-16 relative">
+            {/* Base colored circle (always visible) */}
+            <div className={`w-full h-full flex bg-red-500 text-white justify-center items-center rounded-full`}>
+              {displaySymbol?.slice(0, 3)}
+            </div>
+            
+            {/* Use enhanced image loading with fallbacks */}
+            {!imageError && currentImageUrl && (
+              <img
+                src={currentImageUrl}
+                alt={`${displaySymbol} logo`}
+                className={`absolute inset-0 w-full h-full rounded-full object-cover transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                style={{ zIndex: 1 }}
+                onLoad={() => setImageLoaded(true)}
+                onError={handleImageError}
+                loading="lazy"
+              />
+            )}
           </div>
         </div>
         <div className="flex flex-col flex-grow overflow-hidden">
@@ -370,15 +394,11 @@ export const BuySell = ({
             <h3 className="text-lg font-medium truncate">{displayName}</h3>
             <span className="text-sm text-gray-500">[{displaySymbol}]</span>
           </div>
-          {tokenData?.description ? (
-            <p className="text-sm text-gray-600 mt-1 overflow-y-auto max-h-20">
-              {tokenData.description}
-            </p>
-          ) : tokenUri !== "N/A" ? (
-            <p className="text-sm text-gray-400 italic mt-1">Loading metadata...</p>
-          ) : (
-            <p className="text-sm text-gray-400 italic mt-1">No description available</p>
-          )}
+          
+          {/* Description */}
+          <p className="text-sm text-gray-600 mt-1 overflow-y-auto max-h-20">
+            {description || "No description available"}
+          </p>
           
           {/* Market Cap Estimation */}
           <div className="mt-2 text-xs text-gray-500">
@@ -393,6 +413,22 @@ export const BuySell = ({
                 ) : (
                   <span className="ml-1 text-yellow-500">(ETH price unavailable)</span>
                 )}
+              </div>
+            )}
+            
+            {/* Token URI link if available */}
+            {coinData?.tokenURI && coinData.tokenURI !== 'N/A' && (
+              <div className="mt-1">
+                <a 
+                  href={coinData.tokenURI.startsWith('ipfs://') 
+                    ? `https://content.wrappr.wtf/ipfs/${coinData.tokenURI.slice(7)}` 
+                    : coinData.tokenURI}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-500 hover:underline"
+                >
+                  View Token Metadata
+                </a>
               </div>
             )}
           </div>
