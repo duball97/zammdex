@@ -343,18 +343,12 @@ export const BuySell = ({
     // Log the data for debugging
     console.log('ETH price data from CheckTheChain:', ethPriceData);
     
-    // We need to check if ethPriceData is a tuple or just a string
-    // If the API changed, we need to handle both cases
-    let ethPriceUsd;
+    // ethPriceData is a tuple [bigint, string] from CheckTheChain
+    // Extract the price string (second element of the tuple)
+    const priceStr = ethPriceData[1];
     
-    if (Array.isArray(ethPriceData)) {
-      // Handle array response (tuple) - use the second element (priceStr)
-      const [, priceStr] = ethPriceData;
-      ethPriceUsd = parseFloat(priceStr);
-    } else {
-      // Handle direct string response
-      ethPriceUsd = parseFloat(ethPriceData);
-    }
+    // Parse the ETH price from the string
+    const ethPriceUsd = parseFloat(priceStr);
     
     // Check if the parsing was successful
     if (isNaN(ethPriceUsd)) return null;
@@ -395,9 +389,9 @@ export const BuySell = ({
                 {marketCapUsd !== null ? (
                   <span className="ml-1">(~${formatNumber(marketCapUsd, 0)})</span>
                 ) : ethPriceData ? (
-                  <span className="ml-1 text-yellow-500">(USD price loading...)</span>
+                  <span className="ml-1 text-yellow-500">(USD price processing...)</span>
                 ) : (
-                  <span className="ml-1 text-yellow-500">(ETH price data unavailable)</span>
+                  <span className="ml-1 text-yellow-500">(ETH price unavailable)</span>
                 )}
               </div>
             )}
