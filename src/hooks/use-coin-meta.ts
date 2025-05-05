@@ -42,17 +42,15 @@ export const useCoinMeta = (tokenId: bigint): MetaState => {
         chainId: mainnet.id,
       },
     ],
-    // Improved caching strategy:
-    // - Metadata rarely changes, so we can cache it for much longer
-    // - 24 hours staleTime means we won't refetch unless explicitly invalidated
-    // - This significantly reduces network requests in the explorer grid
     query: {
+      // Improved caching strategy:
+      // - Metadata rarely changes, so we can cache it for much longer
+      // - 24 hours staleTime means we won't refetch unless explicitly invalidated
+      // - This significantly reduces network requests in the explorer grid
       staleTime: 24 * 60 * 60 * 1000, // 24 hours
       // Data is kept in cache for 7 days even when component unmounts
       gcTime: 7 * 24 * 60 * 60 * 1000, // 7 days
-      // Add a unique queryKey to ensure proper cache isolation
-      queryKey: ["coin-meta", tokenId.toString()],
-    },
+    }
   });
 
   // Parse once; components receive stable refs unless something changed

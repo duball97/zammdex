@@ -64,7 +64,7 @@ export const TradeView = ({
   onBack: () => void;
 }) => {
   // Using our new hook to get coin data
-  const { coinData, getDisplayValues } = useCoinData(tokenId);
+  const { getDisplayValues } = useCoinData(tokenId);
   const { name = "Token", symbol = "TKN" } = getDisplayValues();
   
   const { address } = useAccount();

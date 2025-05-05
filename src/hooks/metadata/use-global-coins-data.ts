@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, http, formatEther, formatUnits } from 'viem';
 import { mainnet } from 'viem/chains';
@@ -48,7 +48,7 @@ export function useGlobalCoinsData() {
       const cached = localStorage.getItem(CACHE_KEY);
       if (cached) {
         // Convert the serialized data back to the correct format
-        return JSON.parse(cached, (key, value) => {
+        return JSON.parse(cached, (_key, value) => {
           // Convert serialized BigInts back to actual BigInts
           if (typeof value === 'string' && value.endsWith('n')) {
             return BigInt(value.slice(0, -1));
@@ -67,7 +67,7 @@ export function useGlobalCoinsData() {
     try {
       localStorage.setItem(
         CACHE_KEY,
-        JSON.stringify(data, (key, value) => {
+        JSON.stringify(data, (_key, value) => {
           // Convert BigInts to strings for serialization
           if (typeof value === 'bigint') {
             return value.toString() + 'n';

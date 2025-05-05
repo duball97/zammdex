@@ -12,10 +12,7 @@ import {
   parseUnits,
   formatEther,
   formatUnits,
-  keccak256,
   zeroAddress,
-  encodeAbiParameters,
-  parseAbiParameters,
 } from "viem";
 import { formatNumber } from "./lib/utils";
 import { CoinsAbi, CoinsAddress } from "./constants/Coins";
@@ -24,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { mainnet } from "viem/chains";
-import { useQuery } from "@tanstack/react-query";
 import { handleWalletError } from "./utils";
 import { useCoinData } from "./hooks/metadata";
 import { formatImageURL, getAlternativeImageUrls } from "./hooks/metadata/use-global-coins-data";
@@ -69,16 +65,6 @@ const computePoolKey = (coinId: bigint): PoolKey => ({
   token1: CoinsAddress,
   swapFee: SWAP_FEE,
 });
-
-const computePoolId = (key: PoolKey): `0x${string}` =>
-  keccak256(
-    encodeAbiParameters(
-      parseAbiParameters(
-        "uint256 id0, uint256 id1, address token0, address token1, uint96 swapFee",
-      ),
-      [key.id0, key.id1, key.token0, key.token1, key.swapFee],
-    ),
-  );
 
 // Unchanged getAmountOut from x*y invariants
 const getAmountOut = (
@@ -411,7 +397,7 @@ export const BuySell = ({
           
           {/* Description */}
           <p className="text-sm text-gray-600 mt-1 overflow-y-auto max-h-20">
-            {description || (isLoading ? "Loading description..." : "No description available")}
+            {description || "No description available"}
           </p>
           
           {/* Market Cap Estimation */}

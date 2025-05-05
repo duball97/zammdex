@@ -9,6 +9,7 @@ export const DisplayTokenUri = ({
   symbol: string;
   className?: string;
 }) => {
+  // Using imageLoaded in onLoad handler at line 156
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [actualImageUrl, setActualImageUrl] = useState<string | null>(null);

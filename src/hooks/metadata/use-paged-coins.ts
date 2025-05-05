@@ -66,8 +66,7 @@ export function usePagedCoins(pageSize: number = 20) {
   const { 
     data: directPageItems, 
     isLoading: isPageLoading,
-    error: pageError,
-    refetch: refetchPage
+    error: pageError
   } = useQuery({
     queryKey: ['paged-coins', page, pageSize],
     queryFn: async () => {

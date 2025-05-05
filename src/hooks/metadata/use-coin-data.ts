@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, http } from 'viem';
 import { mainnet } from 'viem/chains';
@@ -17,7 +17,7 @@ const publicClient = createPublicClient({
  */
 export function useCoinData(coinId: bigint) {
   // Try to get the coin data from the global cache first
-  const { allCoins, getCoinById, isLoading: isGlobalLoading } = useGlobalCoinsData();
+  const { getCoinById, isLoading: isGlobalLoading } = useGlobalCoinsData();
   
   // Direct query for a single coin as a fallback
   const { 
