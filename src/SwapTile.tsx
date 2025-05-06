@@ -1291,7 +1291,9 @@ export const SwapTile = () => {
       // This ensures both searched and manually selected tokens work the same
       const targetTokenId = typeof buyToken.id === 'bigint' 
         ? buyToken.id 
-        : BigInt(buyToken.id.toString());
+        : (buyToken.id !== null && buyToken.id !== undefined)
+            ? BigInt(String(buyToken.id))
+            : 0n; // Fallback to 0n if ID is null/undefined (shouldn't happen based on validation)
       
       // Use the selected buyToken's ID to compute the pool key
       const targetPoolKey = computePoolKey(targetTokenId);
