@@ -659,6 +659,41 @@ const TokenSelector = ({
       {/* Dropdown list with thumbnails */}
       {isOpen && (
         <div className="absolute z-20 mt-1 w-[calc(100vw-40px)] sm:w-64 max-h-[60vh] sm:max-h-96 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
+          {/* Search input */}
+          <div className="sticky top-0 bg-white p-2 border-b border-yellow-100">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by symbol..."
+                onChange={(e) => {
+                  // Simply hide/show elements based on the search text
+                  const query = e.target.value.toLowerCase();
+                  
+                  // Get all token items by data attribute
+                  document.querySelectorAll('[data-token-symbol]').forEach(item => {
+                    const symbol = item.getAttribute('data-token-symbol')?.toLowerCase() || '';
+                    const name = item.getAttribute('data-token-name')?.toLowerCase() || '';
+                    
+                    if (symbol.includes(query) || name.includes(query)) {
+                      item.classList.remove('hidden');
+                    } else {
+                      item.classList.add('hidden');
+                    }
+                  });
+                }}
+                className="w-full p-2 pl-8 border border-yellow-200 rounded focus:outline-none focus:ring-2 focus:ring-yellow-300 text-sm"
+              />
+              <svg 
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+          
           {tokens.map((token) => {
             const isSelected = 
               (token.id === null && selectedValue === "eth") || 
@@ -701,6 +736,9 @@ const TokenSelector = ({
               <div 
                 key={token.id?.toString() ?? "eth"}
                 onClick={() => handleSelect(token)}
+                data-token-symbol={token.symbol}
+                data-token-name={token.name}
+                data-token-id={token.id?.toString() ?? "eth"}
                 className={`flex items-center justify-between p-3 sm:p-2 hover:bg-yellow-50 cursor-pointer touch-manipulation ${
                   isSelected ? "bg-yellow-100" : ""
                 }`}
@@ -1249,19 +1287,27 @@ export const SwapTile = () => {
         return;
       }
       
+      // Make sure buyToken.id is properly processed as a BigInt
+      // This ensures both searched and manually selected tokens work the same
+      const targetTokenId = typeof buyToken.id === 'bigint' 
+        ? buyToken.id 
+        : (buyToken.id !== null && buyToken.id !== undefined)
+            ? BigInt(String(buyToken.id))
+            : 0n; // Fallback to 0n if ID is null/undefined (shouldn't happen based on validation)
+      
       // Use the selected buyToken's ID to compute the pool key
-      const targetPoolKey = computePoolKey(buyToken.id);
+      const targetPoolKey = computePoolKey(targetTokenId);
       const deadline = nowSec() + BigInt(DEADLINE_SEC);
       const ethAmount = parseEther(sellAmt);
       
       // Get the reserves for the selected token
       let targetReserves = reserves;
       
-      // If buyToken.id is different from coinId, fetch the correct reserves
-      if (buyToken.id !== coinId) {
+      // If the target token is different from coinId, fetch the correct reserves
+      if (targetTokenId !== coinId) {
         try {
           // Get the pool ID for the target token
-          const targetPoolId = computePoolId(buyToken.id);
+          const targetPoolId = computePoolId(targetTokenId);
           
           const result = await publicClient.readContract({
             address: ZAAMAddress,
