@@ -70,7 +70,7 @@ function App() {
 
         {view === "form" && (
           <div className="">
-            <CoinForm onMemepaperClick={handleMemepaperClick} />
+            <CoinForm />
           </div>
         )}
         {view === "memepaper" && <CoinPaper onCoinClick={handleCoinClick} />}

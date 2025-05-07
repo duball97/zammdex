@@ -147,7 +147,6 @@ export function CoinForm({
     creatorSupply: "0",
   });
 
-  const [imageFile, setImageFile] = useState<File | undefined>(undefined);
   const [imageBuffer, setImageBuffer] = useState<ArrayBuffer | null>(null);
   const { address } = useAccount();
 
@@ -248,7 +247,6 @@ export function CoinForm({
     const singleFile = Array.isArray(file) ? file[0] : file;
     setImageBuffer(null);
     if (singleFile) {
-      setImageFile(singleFile);
       const reader = new FileReader();
       reader.onloadend = () => {
         setImageBuffer(reader.result as ArrayBuffer);
@@ -258,8 +256,6 @@ export function CoinForm({
         setImageBuffer(null);
       };
       reader.readAsArrayBuffer(singleFile);
-    } else {
-      setImageFile(undefined);
     }
   };
 
