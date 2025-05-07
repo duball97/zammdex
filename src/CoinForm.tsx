@@ -137,9 +137,7 @@ const ImageInput = ({ onChange }: ImageInputProps) => {
 };
 
 export function CoinForm({
-  onMemepaperClick,
 }: {
-  onMemepaperClick: () => void;
 }) {
   const [formState, setFormState] = useState({
     name: "",
@@ -150,19 +148,13 @@ export function CoinForm({
   });
 
   const [imageFile, setImageFile] = useState<File | undefined>(undefined);
+  const [imageBuffer, setImageBuffer] = useState<ArrayBuffer | null>(null);
   const { address } = useAccount();
 
   const TOTAL_SUPPLY = 21000000;
-  const [poolSupply, setPoolSupply] = useState(TOTAL_SUPPLY);
   const swapFee = 100;
   const vestingDuration = 15778476;
   const vesting = true;
-
-  useEffect(() => {
-    const creatorAmount = Number(formState.creatorSupply) || 0;
-    const safeCreatorAmount = Math.min(creatorAmount, TOTAL_SUPPLY);
-    setPoolSupply(TOTAL_SUPPLY - safeCreatorAmount);
-  }, [formState.creatorSupply]);
 
   const { writeContract, isPending, isSuccess, data, error } = useWriteContract();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -171,9 +163,9 @@ export function CoinForm({
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!address || !imageFile) {
+    if (!address || !imageBuffer) {
       // Error will be shown in UI
-      setErrorMessage(!address ? "Wallet not connected" : "Please upload an image");
+      setErrorMessage(!address ? "Wallet not connected" : "Please upload an image and wait for it to process");
       return;
     }
 
@@ -186,7 +178,7 @@ export function CoinForm({
       const pinataMetadata = { name: fileName };
 
       const imageHash = await pinImageToPinata(
-        imageFile,
+        imageBuffer,
         fileName,
         pinataMetadata,
       );
@@ -254,17 +246,20 @@ export function CoinForm({
 
   const handleFileChangeInternal = (file: File | File[] | undefined) => {
     const singleFile = Array.isArray(file) ? file[0] : file;
+    setImageBuffer(null);
     if (singleFile) {
       setImageFile(singleFile);
       const reader = new FileReader();
       reader.onloadend = () => {
-        // Assuming setImageBuffer is defined and takes ArrayBuffer
-        // setImageBuffer(reader.result as ArrayBuffer); 
+        setImageBuffer(reader.result as ArrayBuffer);
+      };
+      reader.onerror = () => {
+        setErrorMessage("Failed to read image file.");
+        setImageBuffer(null);
       };
       reader.readAsArrayBuffer(singleFile);
     } else {
       setImageFile(undefined);
-      // setImageBuffer(null);
     }
   };
 
