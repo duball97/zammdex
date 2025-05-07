@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { CoinPaper } from "./CoinPaper";
 import { CoinForm } from "./CoinForm";
 import Coins from "./Coins";
-import { ConnectMenu } from "./ConnectMenu";
+// import { ConnectMenu } from "./ConnectMenu"; // ConnectMenu is used in Header.tsx
 import SwapTile from "./SwapTile";
+import { Header, AppView } from "./Header.tsx"; // Explicitly add .tsx extension
+// import { ExplorerView } from "./ExplorerView"; // No longer need the placeholder
 
 function App() {
-  const [view, setView] = useState<"menu" | "form" | "memepaper" | "swap">(
-    "swap",
-  );
+  const [view, setView] = useState<AppView>("swap");
   const [tapCount, setTapCount] = useState(0);
   const [lastTap, setLastTap] = useState(0);
 
@@ -20,7 +20,7 @@ function App() {
     // Listen for custom view change events
     const handleViewChange = (event: CustomEvent) => {
       if (event.detail && typeof event.detail === 'string') {
-        setView(event.detail as "menu" | "form" | "memepaper" | "swap");
+        setView(event.detail as AppView);
       }
     };
     
@@ -54,18 +54,20 @@ function App() {
   };
 
   return (
-    <main className="p-2 sm:p-3 min-h-screen w-screen flex flex-col justify-center items-center">
-      <div className="w-full max-w-lg">
-        <header className="flex justify-end w-full">
-          <ConnectMenu />
-        </header>
-        <img
-          src="/coinchan-logo.png"
-          alt="Coinchan"
-          className={`logo ${view !== "menu" ? "small" : ""}`}
-          onClick={handleLogoTap}
-          onTouchStart={handleLogoTap}
-        />
+    <main className="p-0 sm:p-0 min-h-screen w-screen flex flex-col items-center bg-gray-900">
+      <Header setView={setView} currentView={view} />
+      
+      <div className="w-full max-w-lg px-2 sm:px-0">
+        {view !== "menu" && view !== "explorer" && view !== "form" && (
+          <img
+            src="/coinchan-logo.png"
+            alt="Coinchan"
+            className={`logo mx-auto mb-4 ${view !== "memepaper" ? "small" : ""}`}
+            onClick={handleLogoTap}
+            onTouchStart={handleLogoTap}
+          />
+        )}
+
         {view === "form" && (
           <div className="">
             <CoinForm onMemepaperClick={handleMemepaperClick} />
@@ -73,8 +75,22 @@ function App() {
         )}
         {view === "memepaper" && <CoinPaper onCoinClick={handleCoinClick} />}
         {view === "swap" && <SwapTile />}
+        {view === "explorer" && (
+          <div className="w-full mt-4">
+            <h2 className="text-2xl font-semibold text-white text-center mb-4">Coin Explorer</h2>
+            <Coins />
+          </div>
+        )}
+        
         {view === "menu" && (
-          <div className="">
+          <div className="text-white">
+            <img
+              src="/coinchan-logo.png"
+              alt="Coinchan"
+              className="logo mx-auto mb-4"
+              onClick={handleLogoTap}
+              onTouchStart={handleLogoTap}
+            />
             <div>
               <div className="flex justify-center items-center w-full">
                 <button
@@ -89,7 +105,6 @@ function App() {
               <Coins />
             </div>
             <div className="main-menu">
-              {/* <ConnectMenu /> */}
               <div className="flex justify-end items-end w-full">
                 <button
                   className={`appearance-none mt-6 mx-auto flex items-center gap-2 px-5 py-2 bg-white hover:scale-105 font-mono text-red-500 transition-colors duration-200`}
