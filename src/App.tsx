@@ -8,6 +8,7 @@ import Coins from "./Coins";
 import SwapTile from "./SwapTile";
 import { Header, AppView } from "./Header.tsx"; // Explicitly add .tsx extension
 // import { ExplorerView } from "./ExplorerView"; // No longer need the placeholder
+import Footer from "./Footer"; // Import the Footer component
 
 function App() {
   const [view, setView] = useState<AppView>("swap");
@@ -117,6 +118,7 @@ function App() {
           </div>
         )}
       </div>
+      <Footer /> {/* Add the Footer component here */}
     </main>
   );
 }

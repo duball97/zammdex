@@ -34,16 +34,16 @@ export const Header: React.FC<HeaderProps> = ({ setView, currentView }) => {
       */}
       <nav className="flex items-center flex-wrap justify-end gap-x-2 gap-y-2 sm:gap-x-3 min-w-0">
         <button 
-          onClick={() => setView('form')}
-          className={`${currentView === 'form' ? activeButtonStyle : inactiveButtonStyle} ${currentView === 'form' ? darkActiveButtonStyle : darkInactiveButtonStyle}`}
-        >
-          Launch Coin
-        </button>
-        <button 
           onClick={() => setView('swap')}
           className={`${currentView === 'swap' ? activeButtonStyle : inactiveButtonStyle} ${currentView === 'swap' ? darkActiveButtonStyle : darkInactiveButtonStyle}`}
         >
           Swap
+        </button>
+        <button 
+          onClick={() => setView('form')}
+          className={`${currentView === 'form' ? activeButtonStyle : inactiveButtonStyle} ${currentView === 'form' ? darkActiveButtonStyle : darkInactiveButtonStyle}`}
+        >
+          Launch Coin
         </button>
         <button 
           onClick={() => setView('explorer')}
