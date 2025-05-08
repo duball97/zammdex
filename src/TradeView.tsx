@@ -7,6 +7,7 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { CoinchanAbi, CoinchanAddress } from "./constants/Coinchan";
+import { CoinsAddress } from "./constants/Coins";
 import { mainnet } from "viem/chains";
 import { useCoinData } from "./hooks/metadata";
 
@@ -128,8 +129,9 @@ export const TradeView = ({
         <h2 className="text-lg sm:text-xl font-semibold">
           {name} [{symbol}]
         </h2>
-        {/* Metadata like tokenId */}
-        <p className="text-sm">ID: {tokenId.toString()}</p>
+        <p className="text-xs text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] break-all">
+          Contract: {CoinsAddress}
+        </p>
       </div>
       
       {/* Wrap BuySell component in an ErrorBoundary to prevent crashes */}
