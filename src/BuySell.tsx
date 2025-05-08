@@ -278,21 +278,6 @@ export const BuySell = ({
     }
   };
   
-  // Calculate market cap in USD
-  const marketCapUsd = useMemo(() => {
-    if (!marketCapEth || !ethPriceData) return null;
-    
-    // Using the string representation as it's likely already in the correct format
-    const priceStr = ethPriceData[1];
-    const ethPriceUsd = parseFloat(priceStr);
-    
-    // Check if the parsing was successful
-    if (isNaN(ethPriceUsd) || ethPriceUsd === 0) return null;
-    
-    // Market cap in USD = market cap in ETH * ETH price in USD
-    return marketCapEth * ethPriceUsd;
-  }, [marketCapEth, ethPriceData]);
-  
   // Use the display name and symbol 
   const displayName = name || propName;
   const displaySymbol = symbol || propSymbol;

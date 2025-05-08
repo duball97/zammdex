@@ -36,6 +36,10 @@ const SWAP_FEE = 100n; // 1% pool fee
 const SLIPPAGE_BPS = 100n; // 1% slippage tolerance
 const DEADLINE_SEC = 20 * 60; // 20 minutes
 
+// Frontend fee parameters
+const FEE_RECIPIENT_ADDRESS = "0xYOUR_FEE_WALLET_ADDRESS_HERE"; // <<< REPLACE THIS
+const FRONTEND_FEE_BPS = 10n; // 0.1% fee (10 basis points)
+
 const withSlippage = (amount: bigint) =>
   (amount * (10000n - SLIPPAGE_BPS)) / 10000n;
 
@@ -1936,7 +1940,7 @@ export const SwapTile = () => {
                   "Provide ETH"}
               </span>
               <>
-                {/* Token Selector styling for single-eth ETH display */} 
+                {/* Token Selector styling for single-eth ETH display */}
                 {isSingleEthLiquidityMode ? (
                   <div className="flex items-center gap-2 bg-[var(--secondary-light)] border border-[var(--border-light)] rounded-[var(--radius-md)] px-2 py-1">
                     <div className="w-6 h-6 overflow-hidden rounded-full"> {/* Smaller icon */}

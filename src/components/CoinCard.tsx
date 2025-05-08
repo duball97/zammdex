@@ -27,7 +27,6 @@ export const CoinCard = ({ coin, onTrade }: CoinCardProps) => {
   // Display values with fallbacks
   const displayName = coin.name || `Token ${coin.coinId.toString()}`;
   const displaySymbol = coin.symbol?.slice(0, 4) || "TKN";
-  const shortCoinId = `${coin.coinId.toString().substring(0, 4)}...${coin.coinId.toString().substring(coin.coinId.toString().length - 4)}`;
 
   // FIX: Centralized image URL resolution logic for clarity and maintainability.
   // Consolidates multiple potential sources (coin.imageUrl, metadata.image, etc.) into a single prioritized check.
