@@ -54,10 +54,10 @@ function App() {
   };
 
   return (
-    <main className="p-0 sm:p-0 min-h-screen w-screen flex flex-col items-center bg-gray-900">
+    <main className="p-0 sm:p-0 min-h-screen w-screen flex flex-col items-center">
       <Header setView={setView} currentView={view} />
       
-      <div className="w-full max-w-lg px-2 sm:px-0">
+      <div className="w-full max-w-lg px-2 sm:px-0 mt-4 mb-8">
         {view !== "menu" && view !== "explorer" && view !== "form" && (
           <img
             src="/coinchan-logo.png"

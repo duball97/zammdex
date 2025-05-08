@@ -81,8 +81,12 @@ const ImageInput = ({ onChange }: ImageInputProps) => {
     };
   }, [previewUrl]);
   
+  const commonBorderClass = "border-2 border-dashed rounded-[var(--radius-lg)]";
+  const draggingClass = "border-[var(--primary-light)] dark:border-[var(--primary-dark)] bg-[var(--primary-light)]/10 dark:bg-[var(--primary-dark)]/10";
+  const defaultBorderClass = "border-[var(--border-light)] dark:border-[var(--border-dark)] hover:border-[var(--muted-foreground-light)] dark:hover:border-[var(--muted-foreground-dark)]";
+
   return (
-    <div className="flex flex-col gap-2 w-full">
+    <div className="flex flex-col gap-3 w-full text-[var(--foreground-light)] dark:text-[var(--foreground-dark)]">
       <input
         ref={fileInputRef}
         type="file"
@@ -91,44 +95,30 @@ const ImageInput = ({ onChange }: ImageInputProps) => {
         className="hidden"
       />
       <div 
-        className={`flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-md ${
-          isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-        } transition-colors duration-200`}
+        className={`flex flex-col items-center justify-center p-6 ${commonBorderClass} ${isDragging ? draggingClass : defaultBorderClass} transition-colors duration-200 cursor-pointer min-h-[150px]`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
       >
         {previewUrl ? (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-3 text-center">
             <img 
               src={previewUrl} 
               alt="Preview" 
-              className="max-h-32 max-w-full object-contain rounded-md" 
+              className="max-h-32 max-w-full object-contain rounded-[var(--radius-md)] shadow-md" 
             />
             <div className="flex flex-col items-center">
-              <p className="text-sm text-gray-500 mb-2">{selectedFileName}</p>
-              <Button 
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                variant="outline"
-                size="sm"
-              >
+              <p className="text-xs text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] mb-1 truncate max-w-[200px]">{selectedFileName}</p>
+              <span className="text-sm text-[var(--primary-light)] dark:text-[var(--primary-dark)] hover:underline cursor-pointer font-medium">
                 Change Image
-              </Button>
+              </span>
             </div>
           </div>
         ) : (
-          <div className="text-center">
-            <p className="mb-2">Drag & drop image here</p>
-            <p>or</p>
-            <Button 
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              variant="outline"
-              className="mt-2"
-            >
-              Browse Files
-            </Button>
+          <div className="text-center text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] flex flex-col items-center gap-1">
+            <p className="font-medium text-sm">Drag & drop image here</p>
+            <p className="text-xs">or click to browse</p>
           </div>
         )}
       </div>
@@ -213,12 +203,10 @@ export function CoinForm({
         // Show confetti only if the transaction was successful
         if (!isUserRejectionError(error)) {
           confetti({
-            particleCount: 666,
-            spread: 666,
-            scalar: 0.9,
-            shapes: ["circle"],
-            gravity: 0.9,
-            colors: ["#f9bd20", "#c17a00", "#fff9e6"],
+            particleCount: 200,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ["#FFC700", "#FF8A00", "#FF005C", "#00C2FF", "#00E5A1"],
           });
         }
       } catch (txError) {
@@ -259,55 +247,57 @@ export function CoinForm({
     }
   };
 
+  const inputBaseClass = "w-full bg-[var(--input-background-light)] dark:bg-[var(--input-background-dark)] text-[var(--input-foreground-light)] dark:text-[var(--input-foreground-dark)] border border-[var(--input-border-light)] dark:border-[var(--input-border-dark)] rounded-[var(--radius-md)] px-3 py-2 text-sm placeholder:text-[var(--muted-foreground-light)] dark:placeholder:text-[var(--muted-foreground-dark)] focus:outline-none focus:ring-2 focus:ring-[var(--ring-light)] dark:focus:ring-[var(--ring-dark)] focus:border-transparent transition-shadow duration-150 shadow-sm hover:shadow-md";
+
   return (
-    <div className="w-full bg-gray-800 p-4 sm:p-6 rounded-lg text-white">
+    <div className="w-full bg-[var(--card-background-light)] dark:bg-[var(--card-background-dark)] p-5 sm:p-6 rounded-[var(--radius-lg)] shadow-lg text-[var(--foreground-light)] dark:text-[var(--foreground-dark)]">
       <form onSubmit={handleSubmit} className="space-y-6 w-full">
-        <div className="space-y-2 w-full">
-          <Label htmlFor="name" className="text-sm font-medium text-gray-300">NAME</Label>
+        <div className="space-y-1.5 w-full">
+          <Label htmlFor="name" className="text-xs font-medium text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">NAME</Label>
           <Input
             id="name"
             name="name"
             value={formState.name}
             onChange={handleChange}
             required
-            className="w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+            className={inputBaseClass}
             placeholder="My Awesome Coin"
           />
         </div>
 
-        <div className="space-y-2 w-full">
-          <Label htmlFor="symbol" className="text-sm font-medium text-gray-300">SYMBOL</Label>
+        <div className="space-y-1.5 w-full">
+          <Label htmlFor="symbol" className="text-xs font-medium text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">SYMBOL</Label>
           <Input
             id="symbol"
             name="symbol"
             value={formState.symbol}
             onChange={handleChange}
             required
-            className="w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+            className={inputBaseClass}
             placeholder="MAC"
           />
         </div>
 
-        <div className="space-y-2 w-full">
-          <Label htmlFor="description" className="text-sm font-medium text-gray-300">DESCRIPTION</Label>
+        <div className="space-y-1.5 w-full">
+          <Label htmlFor="description" className="text-xs font-medium text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">DESCRIPTION</Label>
           <Textarea
             id="description"
             name="description"
             value={formState.description}
             onChange={handleChange}
             required
-            className="w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400 min-h-[100px]"
+            className={`${inputBaseClass} min-h-[100px]`}
             placeholder="A brief description of your coin."
           />
         </div>
         
-        <div className="space-y-2 w-full">
-          <Label className="text-sm font-medium text-gray-300">LOGO</Label>
+        <div className="space-y-1.5 w-full">
+          <Label className="text-xs font-medium text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">LOGO</Label>
           <ImageInput onChange={handleFileChangeInternal} />
         </div>
 
-        <div className="space-y-2 w-full">
-          <Label htmlFor="creatorSupply" className="text-sm font-medium text-gray-300">
+        <div className="space-y-1.5 w-full">
+          <Label htmlFor="creatorSupply" className="text-xs font-medium text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">
             YOUR TOKENS (Max: {TOTAL_SUPPLY.toLocaleString()})
           </Label>
           <Input
@@ -318,25 +308,37 @@ export function CoinForm({
             onChange={handleChange}
             min="0"
             max={TOTAL_SUPPLY}
-            className="w-full bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+            className={inputBaseClass}
           />
-           <p className="text-xs text-gray-400">
+           <p className="text-xs text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] pt-1">
             Pool will receive: {(TOTAL_SUPPLY - (Number(formState.creatorSupply) || 0)).toLocaleString()} tokens.
           </p>
         </div>
 
         {errorMessage && (
-          <p className="text-sm text-red-500 bg-red-900/30 p-2 rounded-md">{errorMessage}</p>
+          <p className="text-sm text-[var(--destructive-foreground-light)] dark:text-[var(--destructive-foreground-dark)] bg-[var(--destructive-light)] dark:bg-[var(--destructive-dark)] p-3 rounded-[var(--radius-md)]">{errorMessage}</p>
         )}
         {isPending && (
           <p className="text-sm text-blue-400">Processing transaction...</p>
         )}
         {isSuccess && data && (
-           <p className="text-sm text-green-400">Coin launched successfully!</p>
+           <p className="text-sm text-green-600 dark:text-green-400 bg-green-500/10 dark:bg-green-500/20 p-3 rounded-[var(--radius-md)]">Coin launched successfully! Transaction: {typeof data === 'string' ? data.substring(0,10) : 'submitted'}...</p>
         )}
 
-        <Button type="submit" disabled={isPending || !address} className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3">
-          {isPending ? "Launching..." : "Launch Coin (0.01 ETH)"}
+        <Button type="submit" disabled={isPending || !address || !imageBuffer} 
+          className={`w-full bg-[var(--primary-light)] dark:bg-[var(--primary-dark)] text-[var(--primary-foreground-light)] dark:text-[var(--primary-foreground-dark)] font-semibold py-2.5 px-4 rounded-[var(--radius-md)] transition-all duration-150 ease-in-out 
+                     hover:opacity-90 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--ring-light)] dark:focus-visible:ring-[var(--ring-dark)]
+                     disabled:opacity-60 disabled:cursor-not-allowed shadow-md hover:shadow-lg`}
+        >
+          {isPending ? (
+            <span className="flex items-center justify-center">
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Launching...
+            </span>
+          ) : "Launch Coin (0.01 ETH)"}
         </Button>
       </form>
     </div>
