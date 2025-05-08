@@ -373,22 +373,15 @@ export const BuySell = ({
               </p>
             )}
             <div className="mt-2 text-xs text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">
-              {marketCapEth !== null && marketCapEth !== undefined && (
+              {marketCapEth !== null && marketCapEth !== undefined && marketCapEth > 0 && (
                 <div className="flex items-center gap-1">
                   <span className="text-[var(--foreground-light)] dark:text-[var(--foreground-dark)]">Est. Market Cap:</span>
-                  <span>{formatNumber(Number(marketCapEth))} ETH</span>
-                  {ethPriceData && marketCapEth > 0 && (
-                     <span className="ml-1">
-                      (~
-                      {(() => {
-                        // Assuming ethPriceData[0] is USD price with 8 decimals
-                        const ethPriceUsd = Number(formatUnits(ethPriceData[0], 8));
-                        const marketCapUsdValue = Number(marketCapEth) * ethPriceUsd;
-                        return `$${formatNumber(marketCapUsdValue, 0)}`; // Calculate and return in one line
-                      })()}
-                      )
+                  <span>
+                    {`${formatNumber(Number(marketCapEth))} ETH`}
+                    <span className="text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] ml-1">
+                      {` (~$ ${(Number(marketCapEth) * 2000).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })})`}
                     </span>
-                  )}
+                  </span>
                 </div>
               )}
               {coinData?.metadata?.tokenURI && (
@@ -456,7 +449,14 @@ export const BuySell = ({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <span className="text-sm">You will receive ~ {estimated} ETH</span>
+              <span className="text-sm">
+                You will receive ~ {estimated} ETH
+                {(estimated && parseFloat(estimated) > 0) && (
+                  <span className="text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] ml-1">
+                    (~$ {(parseFloat(estimated) * 2000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                  </span>
+                )}
+              </span>
               {balance !== undefined ? (
                 <button
                   className="self-end text-sm text-gray-600"
