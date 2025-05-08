@@ -1,4 +1,3 @@
-import React from 'react';
 import { Send, Github, X } from 'lucide-react';
 
 const Footer = () => {
