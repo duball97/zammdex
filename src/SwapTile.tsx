@@ -37,8 +37,8 @@ const SLIPPAGE_BPS = 100n; // 1% slippage tolerance
 const DEADLINE_SEC = 20 * 60; // 20 minutes
 
 // Frontend fee parameters
-const FEE_RECIPIENT_ADDRESS = "0xYOUR_FEE_WALLET_ADDRESS_HERE"; // <<< REPLACE THIS
-const FRONTEND_FEE_BPS = 10n; // 0.1% fee (10 basis points)
+// const FEE_RECIPIENT_ADDRESS = "0xB23e4c5F2d5e415F256B8a758900cCE0eec7f0A2"; // <<< REPLACE THIS
+// const FRONTEND_FEE_BPS = 10n; // 0.1% fee (10 basis points)
 
 const withSlippage = (amount: bigint) =>
   (amount * (10000n - SLIPPAGE_BPS)) / 10000n;
