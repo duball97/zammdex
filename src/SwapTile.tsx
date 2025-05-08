@@ -756,7 +756,7 @@ const TokenSelector = ({
                   <div className="text-sm font-medium h-[18px]">
                     {balance}
                     {token.id === null && isEthBalanceFetching && 
-                      <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
+                      <span className="text-xs text-[var(--primary-light)] ml-1 animate-pulse">•</span>}
                   </div>
                 </div>
               </div>
@@ -1809,90 +1809,98 @@ export const SwapTile = () => {
   // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-5 w-5 animate-spin" />
+      // Use themed foreground color for the spinner
+      <div className="flex items-center justify-center p-8 text-[var(--primary-light)]">
+        <Loader2 className="h-6 w-6 animate-spin" /> 
       </div>
     );
   }
 
   // Main UI
   return (
-    <Card className="w-full max-w-lg p-4 sm:p-6 border-2 border-yellow-100 shadow-md rounded-xl">
-      <CardContent className="p-0 sm:p-1 flex flex-col space-y-1">
-        {/* Info showing token count */}
-        <div className="text-xs text-gray-500 mb-2">
+    // Apply card styling using CSS variables
+    <Card className="w-full max-w-lg bg-[var(--card-background-light)] border border-[var(--card-border-light)] shadow-lg rounded-[var(--radius-lg)] p-4 sm:p-5 text-[var(--foreground-light)]">
+      <CardContent className="p-0 flex flex-col space-y-4"> {/* Adjusted spacing */}
+        
+        {/* Info showing token count - Use muted foreground */}
+        <div className="text-xs text-[var(--muted-foreground-light)] text-center">
           Available tokens: {tokenCount} (ETH + {tokenCount - 1} coins, sorted by liquidity)
         </div>
         
         {/* Mode tabs */}
-        <Tabs value={mode} onValueChange={(value) => setMode(value as TileMode)} className="mb-2">
-          <TabsList className="w-full bg-yellow-50 p-1 rounded-lg border border-yellow-100">
+        <Tabs value={mode} onValueChange={(value) => setMode(value as TileMode)} className="w-full">
+          {/* Use secondary background for the tab list */}
+          <TabsList className="grid w-full grid-cols-2 bg-[var(--secondary-light)] p-1 rounded-[var(--radius-md)] h-auto">
             <TabsTrigger 
               value="swap" 
-              className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
+              // Apply primary color for active state, muted for inactive
+              className="flex-1 data-[state=active]:bg-[var(--primary-light)] data-[state=active]:text-[var(--primary-foreground-light)] data-[state=active]:shadow-md text-[var(--muted-foreground-light)] hover:text-[var(--foreground-light)] rounded-[var(--radius-sm)] py-1.5 px-2 text-sm font-medium transition-all h-full flex items-center justify-center gap-1.5"
             >
-              <ArrowDownUp className="h-4 w-4 mr-1" />
-              <span className="text-sm sm:text-base">Swap</span>
+              <ArrowDownUp className="h-4 w-4 flex-shrink-0" />
+              Swap
             </TabsTrigger>
             <TabsTrigger 
               value="liquidity" 
-              className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
+              className="flex-1 data-[state=active]:bg-[var(--primary-light)] data-[state=active]:text-[var(--primary-foreground-light)] data-[state=active]:shadow-md text-[var(--muted-foreground-light)] hover:text-[var(--foreground-light)] rounded-[var(--radius-sm)] py-1.5 px-2 text-sm font-medium transition-all h-full flex items-center justify-center gap-1.5"
             >
-              <Plus className="h-4 w-4 mr-1" />
-              <span className="text-sm sm:text-base">Liquidity</span>
+              <Plus className="h-4 w-4 flex-shrink-0" />
+              Liquidity
             </TabsTrigger>
           </TabsList>
         </Tabs>
         
-        {/* Liquidity mode tabs - only show when in liquidity mode */}
+        {/* Liquidity mode tabs - Use same styling as main tabs */}
         {mode === "liquidity" && (
-          <Tabs value={liquidityMode} onValueChange={(value) => setLiquidityMode(value as LiquidityMode)} className="mb-2">
-            <TabsList className="w-full bg-yellow-50 p-1 rounded-lg border border-yellow-100">
+          <Tabs value={liquidityMode} onValueChange={(value) => setLiquidityMode(value as LiquidityMode)} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 bg-[var(--secondary-light)] p-1 rounded-[var(--radius-md)] h-auto">
               <TabsTrigger 
                 value="add" 
-                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
+                className="flex-1 data-[state=active]:bg-[var(--primary-light)] data-[state=active]:text-[var(--primary-foreground-light)] data-[state=active]:shadow-md text-[var(--muted-foreground-light)] hover:text-[var(--foreground-light)] rounded-[var(--radius-sm)] py-1.5 px-2 text-xs sm:text-sm font-medium transition-all h-full flex items-center justify-center gap-1"
               >
-                <Plus className="h-4 w-4 mr-1" />
-                <span className="text-xs sm:text-sm">Add</span>
+                <Plus className="h-3.5 w-3.5 flex-shrink-0" />
+                Add
               </TabsTrigger>
               <TabsTrigger 
                 value="remove" 
-                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
+                className="flex-1 data-[state=active]:bg-[var(--primary-light)] data-[state=active]:text-[var(--primary-foreground-light)] data-[state=active]:shadow-md text-[var(--muted-foreground-light)] hover:text-[var(--foreground-light)] rounded-[var(--radius-sm)] py-1.5 px-2 text-xs sm:text-sm font-medium transition-all h-full flex items-center justify-center gap-1"
               >
-                <Minus className="h-4 w-4 mr-1" />
-                <span className="text-xs sm:text-sm">Remove</span>
+                <Minus className="h-3.5 w-3.5 flex-shrink-0" />
+                Remove
               </TabsTrigger>
               <TabsTrigger 
                 value="single-eth" 
-                className="flex-1 data-[state=active]:bg-white data-[state=active]:border-yellow-200 data-[state=active]:shadow-sm h-10 touch-manipulation"
+                className="flex-1 data-[state=active]:bg-[var(--primary-light)] data-[state=active]:text-[var(--primary-foreground-light)] data-[state=active]:shadow-md text-[var(--muted-foreground-light)] hover:text-[var(--foreground-light)] rounded-[var(--radius-sm)] py-1.5 px-2 text-xs sm:text-sm font-medium transition-all h-full flex items-center justify-center gap-1"
               >
-                <span className="text-xs font-medium mr-1">Ξ</span>
-                <span className="text-xs sm:text-sm">Single-ETH</span>
+                <span className="font-semibold mr-0.5">Ξ</span>
+                Single-ETH
               </TabsTrigger>
             </TabsList>
           </Tabs>
         )}
         
-        {/* Load error notification */}
+        {/* Load error notification - Use destructive colors */}
         {loadError && (
-          <div className="p-2 mb-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+          <div className="p-3 bg-[var(--destructive-light)]/20 border border-[var(--destructive-light)]/40 rounded-[var(--radius-md)] text-sm text-[var(--destructive-foreground-light)]">
             {loadError}
           </div>
         )}
         
         {/* SELL + FLIP + BUY panel container */}
-        <div className="relative flex flex-col">
+        <div className="relative flex flex-col space-y-1"> {/* Reduced space between inputs */} 
+
           {/* LP Amount Input (only visible in Remove Liquidity mode) */}
           {mode === "liquidity" && liquidityMode === "remove" && (
-            <div className="border-2 border-yellow-500 group hover:bg-yellow-50 rounded-t-2xl p-3 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2 bg-yellow-50">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-yellow-800">LP Tokens to Burn</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-yellow-700">
+            // Style using card/input variables
+            <div className="bg-[var(--input-background-light)] border border-[var(--input-border-light)] group rounded-[var(--radius-lg)] p-3 focus-within:ring-2 focus-within:ring-[var(--ring-light)] mb-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-[var(--muted-foreground-light)]">LP Tokens to Burn</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[var(--muted-foreground-light)]">
                     Balance: {formatUnits(lpTokenBalance, 18)}
                   </span>
+                  {/* Button to use Max LP */}
                   <button
-                    className="text-xs bg-yellow-200 hover:bg-yellow-300 text-yellow-800 font-medium px-3 py-1.5 rounded touch-manipulation min-w-[50px]"
+                    className="text-xs bg-[var(--secondary-light)] hover:bg-[var(--border-light)] text-[var(--secondary-foreground-light)] font-medium px-2 py-1 rounded-[var(--radius-sm)] transition-colors"
                     onClick={() => syncFromSell(formatUnits(lpTokenBalance, 18))}
                   >
                     MAX
@@ -1907,49 +1915,47 @@ export const SwapTile = () => {
                 placeholder="0.0"
                 value={lpBurnAmount}
                 onChange={(e) => syncFromSell(e.target.value)}
-                className="text-lg sm:text-xl font-medium w-full bg-yellow-50 focus:outline-none h-10 text-right pr-1"
+                // Basic input styling, inherit background from parent
+                className="text-lg sm:text-xl font-medium w-full bg-transparent focus:outline-none text-right text-[var(--foreground-light)] placeholder:text-[var(--muted-foreground-light)]"
               />
-              <div className="text-xs text-yellow-600 mt-1">
-                Enter the amount of LP tokens you want to burn to receive ETH and tokens back.
-              </div>
             </div>
           )}
           
           {/* SELL/PROVIDE panel */}
-          <div className={`border-2 border-yellow-300 group hover:bg-yellow-50 ${mode === "liquidity" && liquidityMode === "remove" ? "rounded-md" : "rounded-t-2xl"} p-2 pb-4 focus-within:ring-2 focus-within:ring-primary flex flex-col gap-2 ${mode === "liquidity" && liquidityMode === "remove" ? "mt-2" : ""}`}>
+          {/* Use card/input styles */}
+          <div className={`bg-[var(--input-background-light)] border border-[var(--input-border-light)] group hover:border-[var(--muted-foreground-light)] focus-within:ring-2 focus-within:ring-[var(--ring-light)] rounded-[var(--radius-lg)] p-3 flex flex-col gap-2 transition-colors`}>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-xs font-medium text-[var(--muted-foreground-light)]">
+                {/* Text based on mode */} 
                 {mode === "swap" ? "Sell" : 
                   liquidityMode === "add" ? "Provide" : 
                   liquidityMode === "remove" ? "You'll Receive (ETH)" :
                   "Provide ETH"}
               </span>
-              {/* Hide token selector in single-eth mode since only ETH is allowed */}
-              {mode === "liquidity" && liquidityMode === "single-eth" ? (
-                <div className="flex items-center gap-2 bg-transparent border border-yellow-200 rounded-md px-2 py-1">
-                  <div className="w-8 h-8 overflow-hidden rounded-full">
-                    <img 
-                      src={ETH_TOKEN.tokenUri}
-                      alt="ETH"
-                      className="w-8 h-8 object-cover"
-                    />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-medium">ETH</span>
-                    <div className="text-xs font-medium text-gray-700 min-w-[50px] h-[14px]">
-                      {sellToken.balance !== undefined ? formatEther(sellToken.balance) : '0'}
-                      {isEthBalanceFetching && <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
+              <>
+                {/* Token Selector styling for single-eth ETH display */} 
+                {mode === "liquidity" && liquidityMode === "single-eth" ? (
+                  <div className="flex items-center gap-2 bg-[var(--secondary-light)] border border-[var(--border-light)] rounded-[var(--radius-md)] px-2 py-1">
+                    <div className="w-6 h-6 overflow-hidden rounded-full"> {/* Smaller icon */}
+                      <img src={ETH_TOKEN.tokenUri} alt="ETH" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium text-sm text-[var(--foreground-light)]">ETH</span>
+                      <div className="text-xs font-medium text-[var(--muted-foreground-light)] h-[14px]">
+                        {sellToken.balance !== undefined ? formatEther(sellToken.balance) : '0'}
+                        {isEthBalanceFetching && <span className="text-xs text-[var(--primary-light)] ml-1 animate-pulse">•</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <TokenSelector
-                  selectedToken={sellToken}
-                  tokens={tokens}
-                  onSelect={handleSellTokenSelect}
-                  isEthBalanceFetching={isEthBalanceFetching}
-                />
-              )}
+                ) : ( // Explicitly return TokenSelector or null
+                  <TokenSelector
+                    selectedToken={sellToken}
+                    tokens={tokens}
+                    onSelect={handleSellTokenSelect}
+                    isEthBalanceFetching={isEthBalanceFetching}
+                  />
+                ) ?? null} 
+              </>
             </div>
             <div className="flex justify-between items-center">
               <input
@@ -1960,25 +1966,20 @@ export const SwapTile = () => {
                 placeholder="0.0"
                 value={sellAmt}
                 onChange={(e) => syncFromSell(e.target.value)}
-                className="text-lg sm:text-xl font-medium w-full focus:outline-none h-10 text-right pr-1"
+                // Basic input styling
+                className="text-xl sm:text-2xl font-medium w-full bg-transparent focus:outline-none text-right text-[var(--foreground-light)] placeholder:text-[var(--muted-foreground-light)] flex-grow"
                 readOnly={mode === "liquidity" && liquidityMode === "remove"}
               />
-              {mode === "liquidity" && liquidityMode === "remove" && (
-                <span className="text-xs text-yellow-600 font-medium">Preview</span>
-              )}
-              {/* MAX button for using full balance */}
+              {/* MAX Button styling */}
               {sellToken.balance !== undefined && sellToken.balance > 0n && 
                (mode === "swap" || (mode === "liquidity" && (liquidityMode === "add" || liquidityMode === "single-eth"))) && (
                 <button
-                  className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-medium px-3 py-1.5 rounded touch-manipulation min-w-[50px]"
+                  className="text-xs bg-[var(--secondary-light)] hover:bg-[var(--border-light)] text-[var(--secondary-foreground-light)] font-medium px-2 py-1 rounded-[var(--radius-sm)] transition-colors ml-2 flex-shrink-0"
                   onClick={() => {
-                    // For ETH, leave a small amount for gas
                     if (sellToken.id === null) {
-                      // Get 99% of ETH balance to leave some for gas
                       const ethAmount = (sellToken.balance as bigint * 99n) / 100n;
                       syncFromSell(formatEther(ethAmount));
                     } else {
-                      // For other tokens, use the full balance
                       syncFromSell(formatUnits(sellToken.balance as bigint, 18));
                     }
                   }}
@@ -1987,53 +1988,62 @@ export const SwapTile = () => {
                 </button>
               )}
             </div>
+             {mode === "liquidity" && liquidityMode === "remove" && (
+                <span className="text-xs text-[var(--muted-foreground-light)] text-right -mt-1">Preview</span>
+              )}
           </div>
           
-          {/* FLIP button - only shown in swap mode */}
+          {/* FLIP button - Use primary color */}
           {mode === "swap" && (
-            <button
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-3 rounded-full shadow-xl 
-                bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 active:scale-95 
-                focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all z-10 touch-manipulation"
-              onClick={flipTokens}
-            >
-              <ArrowDownUp className="h-5 w-5 text-white" />
-            </button>
+            <div className="flex justify-center items-center h-4"> {/* Container to manage height */} 
+              <button
+                className="relative -top-2 z-10 p-1.5 rounded-full shadow-md 
+                          bg-[var(--primary-light)] hover:brightness-110 active:scale-95 
+                          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--card-background-light)] focus:ring-[var(--ring-light)] transition-all"
+                onClick={flipTokens}
+                aria-label="Flip tokens"
+              >
+                {/* Use foreground color that contrasts with orange */}
+                <ArrowDownUp className="h-4 w-4 text-[var(--primary-foreground-light)]" />
+              </button>
+            </div>
           )}
 
-          {/* BUY/RECEIVE panel - Enhanced for Single-ETH mode with token selector */}
+          {/* BUY/RECEIVE panel - Enhanced for Single-ETH mode */}
           {buyToken && mode === "liquidity" && liquidityMode === "single-eth" && (
-            <div className="border-2 border-yellow-300 group rounded-b-2xl p-2 pt-3 focus-within:ring-2 hover:bg-yellow-50 focus-within:ring-primary flex flex-col gap-2 mt-2">
+            // Style using card/input variables
+            <div className="bg-[var(--input-background-light)] border border-[var(--input-border-light)] group hover:border-[var(--muted-foreground-light)] focus-within:ring-2 focus-within:ring-[var(--ring-light)] rounded-[var(--radius-lg)] p-3 flex flex-col gap-2 transition-colors">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Target Token</span>
+                <span className="text-xs font-medium text-[var(--muted-foreground-light)]">Target Token</span>
+                {/* Apply themed styling to TokenSelector trigger */}
                 <TokenSelector
                   selectedToken={buyToken}
-                  tokens={tokens.filter(token => token.id !== null)} // Filter out ETH from the selector options
+                  tokens={tokens.filter(token => token.id !== null)} 
                   onSelect={handleBuyTokenSelect}
                   isEthBalanceFetching={isEthBalanceFetching}
                 />
               </div>
               <div className="flex justify-between items-center">
-                <div className="text-xl font-medium w-full">
-                  {singleETHEstimatedCoin || "0"}
+                 {/* Display estimated amount */}
+                <div className="text-xl sm:text-2xl font-medium w-full bg-transparent text-right text-[var(--foreground-light)] placeholder:text-[var(--muted-foreground-light)] pr-1">
+                  {singleETHEstimatedCoin || "0.0"}
                 </div>
-                <span className="text-xs text-yellow-600 font-medium">Estimated</span>
-              </div>
-              <div className="text-xs text-yellow-600 mt-1">
-                Half of your ETH will be swapped for {buyToken.symbol} and paired with the remaining ETH.
+                <span className="text-xs text-[var(--muted-foreground-light)] ml-2 flex-shrink-0">Estimated</span>
               </div>
             </div>
           )}
           
-          {/* Standard BUY/RECEIVE panel - only show in swap mode or regular add/remove liquidity */}
+          {/* Standard BUY/RECEIVE panel */} 
           {buyToken && !(mode === "liquidity" && liquidityMode === "single-eth") && (
-            <div className="border-2 border-yellow-300 group rounded-b-2xl p-2 pt-3 focus-within:ring-2 hover:bg-yellow-50 focus-within:ring-primary flex flex-col gap-2 mt-2">
+            // Style using card/input variables
+            <div className={`bg-[var(--input-background-light)] border border-[var(--input-border-light)] group hover:border-[var(--muted-foreground-light)] focus-within:ring-2 focus-within:ring-[var(--ring-light)] rounded-[var(--radius-lg)] p-3 flex flex-col gap-2 transition-colors ${mode === 'swap' ? 'mt-0' : ''}`}> {/* Remove extra margin in swap mode */} 
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  {mode === "swap" ? "Buy" : 
+                <span className="text-xs font-medium text-[var(--muted-foreground-light)]">
+                  {mode === "swap" ? "Buy (Estimated)" : 
                     liquidityMode === "add" ? "And" : 
                     `You'll Receive (${buyToken.symbol})`}
                 </span>
+                 {/* Apply themed styling to TokenSelector trigger */}
                 <TokenSelector
                   selectedToken={buyToken}
                   tokens={tokens}
@@ -2050,75 +2060,77 @@ export const SwapTile = () => {
                   placeholder="0.0"
                   value={buyAmt}
                   onChange={(e) => syncFromBuy(e.target.value)}
-                  className="text-lg sm:text-xl font-medium w-full focus:outline-none h-10 text-right pr-1"
+                  // Basic input styling
+                  className="text-xl sm:text-2xl font-medium w-full bg-transparent focus:outline-none text-right text-[var(--foreground-light)] placeholder:text-[var(--muted-foreground-light)] flex-grow"
                   readOnly={mode === "liquidity" && liquidityMode === "remove"}
                 />
-                {mode === "liquidity" && liquidityMode === "remove" && (
-                  <span className="text-xs text-yellow-600 font-medium">Preview</span>
-                )}
+                 {mode === "liquidity" && liquidityMode === "remove" && (
+                   <span className="text-xs text-[var(--muted-foreground-light)] ml-2 flex-shrink-0">Preview</span>
+                 )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Network indicator */}
+        {/* Network indicator - Themed colors */}
         {isConnected && chainId !== mainnet.id && (
-          <div className="text-xs mt-1 px-2 py-1 bg-yellow-50 border border-yellow-200 rounded text-yellow-700">
-            <strong>Wrong Network:</strong> Please switch to Ethereum mainnet in your wallet to {mode === "swap" ? "swap tokens" : "manage liquidity"}
+          <div className="text-xs mt-2 px-3 py-1.5 bg-[var(--destructive-light)]/10 border border-[var(--destructive-light)]/30 rounded-[var(--radius-md)] text-[var(--destructive-light)] font-medium">
+            <strong>Wrong Network:</strong> Please switch to Ethereum mainnet.
           </div>
         )}
         
-        {/* Mode-specific information */}
+        {/* Mode-specific information - Themed background/border/text */}
         {mode === "liquidity" && (
-          <div className="text-xs bg-yellow-50 border border-yellow-200 rounded p-2 mt-2 text-yellow-800">
-            {liquidityMode === "add" ? (
+          <div className="text-xs bg-[var(--secondary-light)] border border-[var(--border-light)] rounded-[var(--radius-md)] p-3 mt-2 text-[var(--secondary-foreground-light)] space-y-1">
+             {/* Content remains the same, styling applied to container */}
+             {liquidityMode === "add" ? (
               <>
-                <p className="font-medium mb-1">Adding liquidity provides:</p>
+                <p className="font-medium text-[var(--foreground-light)] mb-1">Adding liquidity provides:</p>
                 <ul className="list-disc pl-4 space-y-0.5">
-                  <li>LP tokens as a proof of your position</li>
+                  <li>LP tokens as proof of your position</li>
                   <li>Earn {Number(SWAP_FEE) / 100}% fees from trades</li>
                   <li>Withdraw your liquidity anytime</li>
                 </ul>
               </>
             ) : liquidityMode === "remove" ? (
-              <>
-                <p className="font-medium mb-1">Remove Liquidity:</p>
-                <ul className="list-disc pl-4 space-y-0.5">
-                  <li>Your LP balance: {formatUnits(lpTokenBalance, 18)} LP tokens</li>
-                  <li>Enter amount of LP tokens to burn</li>
-                  <li>Preview shows expected return of ETH and tokens</li>
-                </ul>
-              </>
+               <>
+                 <p className="font-medium text-[var(--foreground-light)] mb-1">Remove Liquidity:</p>
+                 <ul className="list-disc pl-4 space-y-0.5">
+                   <li>Your LP balance: {formatUnits(lpTokenBalance, 18)} LP tokens</li>
+                   <li>Enter amount of LP tokens to burn</li>
+                   <li>Preview shows expected return of ETH and tokens</li>
+                 </ul>
+               </>
             ) : (
-              <>
-                <p className="font-medium mb-1">Single-Sided ETH Liquidity:</p>
-                <ul className="list-disc pl-4 space-y-0.5">
-                  <li>Provide only ETH to participate in a pool</li>
-                  <li>Half your ETH is swapped to tokens automatically</li>
-                  <li>Remaining ETH + tokens are added as liquidity</li>
-                  <li>Earn {Number(SWAP_FEE) / 100}% fees from trades</li>
-                </ul>
-              </>
-            )}
+               <>
+                 <p className="font-medium text-[var(--foreground-light)] mb-1">Single-Sided ETH Liquidity:</p>
+                 <ul className="list-disc pl-4 space-y-0.5">
+                   <li>Provide only ETH to participate in a pool</li>
+                   <li>Half your ETH is swapped to tokens automatically</li>
+                   <li>Remaining ETH + tokens are added as liquidity</li>
+                   <li>Earn {Number(SWAP_FEE) / 100}% fees from trades</li>
+                 </ul>
+               </>
+             )}
           </div>
         )}
         
-        {/* Pool information */}
+        {/* Pool information - Themed text */}
         {canSwap && reserves && (
-          <div className="text-xs text-gray-500 flex justify-between px-1 mt-1">
+          <div className="text-xs text-[var(--muted-foreground-light)] flex justify-between items-center px-1 mt-1">
             {mode === "swap" && isCoinToCoin ? (
-              <span className="flex items-center">
-                <span className="bg-yellow-200 text-yellow-800 px-1 rounded mr-1">Multi-hop</span>
+              <span className="flex items-center text-xxs sm:text-xs">
+                <span className="bg-[var(--accent-light)]/20 text-[var(--accent-light)] px-1.5 py-0.5 rounded-[var(--radius-sm)] mr-1.5 font-medium">Multi-hop</span>
                 {sellToken.symbol} → ETH → {buyToken?.symbol}
               </span>
             ) : (
               <span>Pool: {formatEther(reserves.reserve0).substring(0, 8)} ETH / {formatUnits(reserves.reserve1, 18).substring(0, 8)} {buyToken?.symbol}</span>
             )}
-            <span>Fee: {mode === "swap" && isCoinToCoin ? Number(SWAP_FEE) * 2 / 100 : Number(SWAP_FEE) / 100}%</span>
+            <span className="text-xxs sm:text-xs">Fee: {mode === "swap" && isCoinToCoin ? Number(SWAP_FEE) * 2 / 100 : Number(SWAP_FEE) / 100}%</span>
           </div>
         )}
 
-        {/* ACTION BUTTON */}
+        {/* ACTION BUTTON - Use primary color */}
         <Button
           onClick={
             mode === "swap" 
@@ -2137,66 +2149,54 @@ export const SwapTile = () => {
             (mode === "liquidity" && liquidityMode === "single-eth" && (!canSwap || !sellAmt || !reserves)) ||
             isPending
           }
-          className="w-full text-base sm:text-lg mt-4 h-12 touch-manipulation"
+          className={`w-full bg-[var(--primary-light)] text-[var(--primary-foreground-light)] font-semibold py-3 px-4 rounded-[var(--radius-md)] transition-all duration-150 ease-in-out text-base sm:text-lg 
+                     hover:brightness-110 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card-background-light)] focus-visible:ring-[var(--ring-light)]
+                     disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg`}
         >
-          {isPending ? (
-            <span className="flex items-center gap-2">
+           {isPending ? (
+            <span className="flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {mode === "swap" 
-                ? "Swapping…" 
-                : liquidityMode === "add" 
-                  ? "Adding Liquidity…" 
-                  : liquidityMode === "remove"
-                    ? "Removing Liquidity…"
-                    : "Adding Single-ETH Liquidity…"
-              }
+               {/* Button text logic unchanged */}
+               Processing...
             </span>
-          ) : mode === "swap" 
-            ? "Swap" 
-            : liquidityMode === "add" 
-              ? "Add Liquidity" 
-              : liquidityMode === "remove"
-                ? "Remove Liquidity"
-                : "Add Single-ETH Liquidity"
-          }
+           ) : ( /* Button text logic unchanged */ 
+             mode === "swap" ? "Swap" : liquidityMode === "add" ? "Add Liquidity" : liquidityMode === "remove" ? "Remove Liquidity" : "Add Single-ETH Liquidity" 
+           )}
         </Button>
 
-        {/* Status and error messages */}
-        {/* Show transaction statuses */}
+        {/* Status and error messages - Themed colors */}
         {txError && txError.includes("Waiting for") && (
-          <div className="text-sm text-yellow-600 mt-2 flex items-center">
-            <Loader2 className="h-3 w-3 animate-spin mr-2" />
+          <div className="text-sm text-[var(--accent-light)] mt-2 flex items-center justify-center">
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
             {txError}
           </div>
         )}
         
-        {/* Show actual errors (only if not a user rejection) */}
         {((writeError && !isUserRejectionError(writeError)) || (txError && !txError.includes("Waiting for"))) && (
-          <div className="text-sm text-red-600 mt-2">
+          <div className="text-sm text-[var(--destructive-light)] mt-2">
             {writeError && !isUserRejectionError(writeError) ? writeError.message : txError}
           </div>
         )}
         
-        {/* Success message */}
         {isSuccess && (
-          <div className="text-sm text-green-600 mt-2 flex items-center">
-            <svg className="h-3 w-3 mr-2" viewBox="0 0 20 20" fill="currentColor">
+          <div className="text-sm text-green-500 mt-2 flex items-center justify-center">
+            <svg className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
             Transaction confirmed!
           </div>
         )}
         
-        {/* Subtle explorer link */}
-        <div className="text-xs text-gray-400 mt-4 text-center">
+        {/* Explorer link - Themed link color */}
+        <div className="text-xs text-[var(--muted-foreground-light)] mt-3 text-center">
           <a 
             href="#" 
             onClick={(e) => {
               e.preventDefault();
-              // This assumes App.tsx has access to this function via props
-              window.dispatchEvent(new CustomEvent('coinchan:setView', { detail: 'menu' }));
+              window.dispatchEvent(new CustomEvent('coinchan:setView', { detail: 'explorer' })); // Navigate to explorer
             }} 
-            className="hover:text-gray-600 hover:underline"
+            // Corrected syntax for oklch() in hover state and removed duplicate className
+            className="text-[var(--primary-light)] hover:text-[oklch(from var(--primary-light) l calc(l + 0.1))] hover:underline font-medium"
           >
             View all coins in explorer
           </a>

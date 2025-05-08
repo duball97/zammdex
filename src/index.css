@@ -7,43 +7,45 @@
 }
 
 /* ———————————————————————————————————————————————————————————————
-   Modern Variables - Light Theme
+   Black & Orange Theme Variables
    ——————————————————————————————————————————————————————————————— */
 :root {
   --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono: "Courier New", Courier, monospace; /* Keep mono for specific uses if needed */
+  --font-mono: "Courier New", Courier, monospace;
 
-  /* Light Theme Colors (Example Palette - can be refined) */
-  --background-light: oklch(0.98 0.01 240); /* Very light cool gray */
-  --foreground-light: oklch(0.15 0.02 240); /* Dark cool gray for text */
+  /* Black & Orange Theme (Dark by Default) */
+  --background-light: oklch(0.12 0.01 240); /* Very Dark Blue/Gray (almost black) */
+  --foreground-light: oklch(0.95 0.005 240); /* Light Gray/Off-white for text */
   
-  --card-background-light: oklch(1 0 0); /* White */
+  --card-background-light: oklch(0.18 0.015 240); /* Slightly lighter dark for cards */
   --card-foreground-light: var(--foreground-light);
-  --card-border-light: oklch(0.92 0.01 240);
+  --card-border-light: oklch(0.25 0.015 240); /* Subtle border for cards */
 
-  --popover-background-light: oklch(1 0 0);
+  --popover-background-light: oklch(0.20 0.015 240); /* Dark popover */
   --popover-foreground-light: var(--foreground-light);
 
-  --primary-light: oklch(0.6 0.15 260); /* A modern blue/purple */
-  --primary-foreground-light: oklch(1 0 0); /* White */
-  
-  --secondary-light: oklch(0.94 0.02 240); /* Lighter gray for secondary elements */
-  --secondary-foreground-light: oklch(0.3 0.02 240); /* Medium gray text on secondary */
+  --primary-light: oklch(0.7 0.22 50); /* Vibrant Orange */
+  --primary-foreground-light: oklch(0.1 0.01 50); /* Dark text for on-orange buttons if needed, or white */
+  /* For orange buttons with white text, use a darker orange: oklch(0.65 0.22 45) */
+  /* If primary-foreground is white: oklch(1 0 0) or var(--foreground-light) */
 
-  --accent-light: oklch(0.7 0.2 50); /* A vibrant accent, e.g., orange/yellow */
-  --accent-foreground-light: oklch(0.1 0.01 50);
+  --secondary-light: oklch(0.25 0.02 240); /* Darker gray for secondary elements */
+  --secondary-foreground-light: oklch(0.8 0.01 240); /* Lighter gray text on secondary */
 
-  --muted-light: oklch(0.94 0.02 240);
-  --muted-foreground-light: oklch(0.45 0.02 240); /* Softer text */
+  --accent-light: oklch(0.75 0.2 45); /* Another shade of Orange or complementary */
+  --accent-foreground-light: oklch(0.1 0.01 45);
 
-  --destructive-light: oklch(0.6 0.22 25); /* A modern red for errors */
-  --destructive-foreground-light: oklch(1 0 0);
+  --muted-light: oklch(0.25 0.015 240);
+  --muted-foreground-light: oklch(0.60 0.01 240); /* Softer, less prominent text */
 
-  --border-light: oklch(0.88 0.015 240); /* Default border color */
-  --input-background-light: oklch(1 0 0); /* White */
-  --input-border-light: var(--border-light);
+  --destructive-light: oklch(0.6 0.22 25); /* A modern red for errors, stands out on dark */
+  --destructive-foreground-light: oklch(0.95 0.005 25); /* Light text on red */
+
+  --border-light: oklch(0.3 0.015 240); /* Default border color for elements */
+  --input-background-light: oklch(0.2 0.015 240); /* Dark input background */
+  --input-border-light: oklch(0.35 0.015 240); /* Slightly lighter border for inputs */
   --input-foreground-light: var(--foreground-light);
-  --ring-light: oklch(0.7 0.15 260 / 0.5); /* Focus ring, related to primary */
+  --ring-light: oklch(0.75 0.22 50 / 0.6); /* Orange focus ring */
 
   --radius-sm: 0.375rem; /* 6px */
   --radius-md: 0.5rem;   /* 8px */
@@ -51,38 +53,38 @@
   --radius-xl: 1rem;    /* 16px */
 }
 
-/* Dark Theme Variables (Placeholder - can be detailed later) */
+/* Dark Theme Variables (Effectively the same as :root if base is dark) */
 .dark {
-  --background-dark: oklch(0.12 0.02 240); /* Dark cool gray */
-  --foreground-dark: oklch(0.95 0.01 240); /* Light cool gray for text */
+  --background-dark: var(--background-light); 
+  --foreground-dark: var(--foreground-light);
 
-  --card-background-dark: oklch(0.18 0.025 240); 
-  --card-foreground-dark: var(--foreground-dark);
-  --card-border-dark: oklch(0.25 0.02 240);
+  --card-background-dark: var(--card-background-light); 
+  --card-foreground-dark: var(--card-foreground-light);
+  --card-border-dark: var(--card-border-light);
 
-  --popover-background-dark: oklch(0.15 0.025 240);
-  --popover-foreground-dark: var(--foreground-dark);
+  --popover-background-dark: var(--popover-background-light);
+  --popover-foreground-dark: var(--popover-foreground-light);
 
-  --primary-dark: oklch(0.65 0.16 260); /* Slightly lighter/brighter blue for dark mode */
-  --primary-foreground-dark: oklch(1 0 0);
+  --primary-dark: var(--primary-light); 
+  --primary-foreground-dark: var(--primary-foreground-light);
   
-  --secondary-dark: oklch(0.22 0.025 240);
-  --secondary-foreground-dark: oklch(0.8 0.01 240);
+  --secondary-dark: var(--secondary-light);
+  --secondary-foreground-dark: var(--secondary-foreground-light);
 
-  --accent-dark: oklch(0.75 0.2 50); 
-  --accent-foreground-dark: oklch(0.98 0.01 50);
+  --accent-dark: var(--accent-light); 
+  --accent-foreground-dark: var(--accent-foreground-light);
 
-  --muted-dark: oklch(0.22 0.025 240);
-  --muted-foreground-dark: oklch(0.65 0.01 240);
+  --muted-dark: var(--muted-light);
+  --muted-foreground-dark: var(--muted-foreground-light);
 
-  --destructive-dark: oklch(0.65 0.23 25);
-  --destructive-foreground-dark: oklch(1 0 0);
+  --destructive-dark: var(--destructive-light);
+  --destructive-foreground-dark: var(--destructive-foreground-light);
 
-  --border-dark: oklch(0.3 0.02 240);
-  --input-background-dark: oklch(0.2 0.025 240);
-  --input-border-dark: var(--border-dark);
-  --input-foreground-dark: var(--foreground-dark);
-  --ring-dark: oklch(0.75 0.16 260 / 0.5);
+  --border-dark: var(--border-light);
+  --input-background-dark: var(--input-background-light);
+  --input-border-dark: var(--input-border-light);
+  --input-foreground-dark: var(--input-foreground-light);
+  --ring-dark: var(--ring-light);
 }
 
 
@@ -99,62 +101,55 @@ html {
 body {
   min-height: 100vh;
   width: 100vw;
-  /* Default to light theme variables */
+  /* Default to light theme variables (which are now our black/orange theme) */
   background-color: var(--background-light);
   color: var(--foreground-light);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* .dark body selector is not strictly needed if :root is already the dark theme */
+/* However, keeping it doesn't hurt if a toggle mechanism adds/removes .dark */
 .dark body {
-  background-color: var(--background-dark);
+  background-color: var(--background-dark); /* Will use the .dark variables */
   color: var(--foreground-dark);
 }
 
-
 img.logo {
-  width: 150px; /* Fixed moderate size */
-  max-width: 100%; /* Ensure it doesn't overflow small screens */
-  margin: 1rem auto 1.5rem; /* Adjusted margins */
+  width: 150px; 
+  max-width: 100%; 
+  margin: 1rem auto 1.5rem; 
   cursor: pointer;
   transition: transform 0.3s ease;
-  /* Removed float animation for a cleaner look, can be added back if desired */
 }
 img.logo:hover {
   transform: scale(1.05);
 }
 
-img.logo.small { /* This class might need re-evaluation based on new design */
+img.logo.small { 
   width: 80px;
-  /* transform: scale(1.1); // Hover effect is now on the base logo */
 }
 
-
-/* Remove old menu & form specific styles, will be handled by Tailwind in components */
-/* .main-menu { ... } */
-
-/* Base label styling - can be enhanced by Tailwind in components */
 label {
   display: block;
-  font-family: var(--font-sans); /* Ensure Inter font */
-  font-size: 0.875rem; /* 14px */
+  font-family: var(--font-sans); 
+  font-size: 0.875rem; 
   font-weight: 500;
-  color: var(--muted-foreground-light); /* Using a muted color */
-  margin-bottom: 0.375rem; /* 6px */
+  color: var(--muted-foreground-light);
+  margin-bottom: 0.375rem; 
 }
 
 .dark label {
   color: var(--muted-foreground-dark);
 }
 
-/* Base link styling */
 a {
   color: var(--primary-light);
   text-decoration: none;
   transition: color 0.2s ease;
 }
 a:hover {
-  color: oklch(from var(--primary-light) l calc(l - 0.1)); /* Darken primary on hover */
+  color: oklch(from var(--primary-light) l calc(l + 0.1)); /* Lighten orange on hover for dark bg */
   text-decoration: underline;
 }
 
@@ -162,24 +157,19 @@ a:hover {
   color: var(--primary-dark);
 }
 .dark a:hover {
-  color: oklch(from var(--primary-dark) l calc(l + 0.1)); /* Lighten primary on hover for dark mode */
+  color: oklch(from var(--primary-dark) l calc(l + 0.1)); 
 }
 
-/* Remove specific animations for now, can be added back selectively */
-/* @keyframes floatIn { ... } */
-/* @keyframes float { ... } */
-
-/* scrollbar (optional - styling for a more modern look) */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
-  background-color: var(--background-light); /* Or a very light gray */
+  background-color: var(--background-light); 
 }
 .dark ::-webkit-scrollbar {
   background-color: var(--background-dark);
 }
 ::-webkit-scrollbar-thumb {
-  background-color: var(--border-light); /* A neutral scrollbar color */
+  background-color: var(--border-light); 
   border-radius: var(--radius-xl);
 }
 .dark ::-webkit-scrollbar-thumb {
@@ -192,40 +182,11 @@ a:hover {
   background-color: var(--muted-foreground-dark);
 }
 
-
-/* Remove old paper-container, blob, stats-grid, etc. These should be component-level styles using Tailwind */
-/* .paper-container { ... } */
-/* .blob { ... } */
-/* .content { ... } */
-/* .stats-grid { ... } */
-/* .stat-card { ... } */
-/* .stat-icon { ... } */
-/* .stat-text .label { ... } */
-/* .stat-text .value { ... } */
-/* .paper-title { ... } */
-/* .explanation { ... } */
-/* .leading-paragraph { ... } */
-/* .explanation ul { ... } */
-/* .explanation li { ... } */
-/* .feature-list li { ... } */
-/* .coins-container { ... } */
-
-
-/* Cleanup shadcn/ui like theme definitions if they are not used or will be replaced by new scheme */
-/* @theme inline { ... } */
-/* .dark { ... } // The one defining lots of --color-* variables if not the one above */
-
 @layer base {
   * {
-    /* Apply a more subtle border strategy, or handle borders per component */
-    /* @apply border-border outline-ring/50; */
-    @apply focus-visible:outline-2 focus-visible:outline-offset-2; /* Modern focus rings */
+    @apply focus-visible:outline-2 focus-visible:outline-offset-2; 
   }
-  body {
-    /* These are now set above with CSS variables */
-    /* @apply bg-background text-foreground; */
-  }
-  /* Define ring color using our CSS variable */
+  body {}
   *:focus-visible {
     outline-color: var(--ring-light);
   }
@@ -233,6 +194,3 @@ a:hover {
     outline-color: var(--ring-dark);
   }
 }
-
-/* Remove any remaining specific component styles if they will be handled by Tailwind in .tsx files */
-/* For example, if there were .button styles, .input styles etc. not using Tailwind */
