@@ -306,211 +306,201 @@ export const BuySell = ({
   
   // Determine the best image URL to use
   useEffect(() => {
-    if (!coinData) return;
-    
-    let imageUrl = null;
-    let imageSourceForAlternatives = '';
-    setImageLoaded(false);
-    setImageError(false);
-    attemptedUrlsRef.current = new Set();
-    
-    // Try different sources in order of preference
-    if (coinData.imageUrl) {
-      imageUrl = coinData.imageUrl;
-      imageSourceForAlternatives = coinData.imageUrl;
-    } else if (coinData.metadata?.image) {
-      imageUrl = formatImageURL(coinData.metadata.image);
-      imageSourceForAlternatives = coinData.metadata.image;
-    } else if (coinData.metadata?.image_url) {
-      imageUrl = formatImageURL(coinData.metadata.image_url);
-      imageSourceForAlternatives = coinData.metadata.image_url;
-    } else if (coinData.metadata?.imageUrl) {
-      imageUrl = formatImageURL(coinData.metadata.imageUrl);
-      imageSourceForAlternatives = coinData.metadata.imageUrl;
-    }
-    
-    // Generate alternative URLs for fallback
-    if (imageSourceForAlternatives) {
-      alternativeUrlsRef.current = getAlternativeImageUrls(imageSourceForAlternatives);
+    if (coinData?.imageUrl) {
+      const initialUrl = formatImageURL(coinData.imageUrl);
+      setCurrentImageUrl(initialUrl);
+      attemptedUrlsRef.current.add(initialUrl);
+      alternativeUrlsRef.current = getAlternativeImageUrls(coinData.imageUrl);
+    } else if (coinData?.metadata?.image) {
+      const initialUrl = formatImageURL(coinData.metadata.image);
+      setCurrentImageUrl(initialUrl);
+      attemptedUrlsRef.current.add(initialUrl);
+      alternativeUrlsRef.current = getAlternativeImageUrls(coinData.metadata.image);
     } else {
+      setCurrentImageUrl(null);
       alternativeUrlsRef.current = [];
     }
-    
-    setCurrentImageUrl(imageUrl);
-    if (imageUrl) {
-      attemptedUrlsRef.current.add(imageUrl);
-    }
-  }, [coinData]);
+    setImageLoaded(false);
+    setImageError(false);
+    // Reset attempted URLs when coinData changes, except for the new initialUrl
+    const newAttempted = new Set<string>();
+    if (currentImageUrl) newAttempted.add(currentImageUrl);
+    attemptedUrlsRef.current = newAttempted;
+
+  }, [coinData?.imageUrl, coinData?.metadata?.image]);
   
   // Handle image load error with fallback attempt
   const handleImageError = useCallback(() => {
-    console.error(`Image failed to load for coin ${tokenId.toString()}`);
-    
-    // Try next alternative URL if available
     if (alternativeUrlsRef.current.length > 0) {
-      // Find the first URL we haven't tried yet
       const nextUrl = alternativeUrlsRef.current.find(url => !attemptedUrlsRef.current.has(url));
-      
       if (nextUrl) {
-        console.log(`Trying alternative URL: ${nextUrl}`);
-        attemptedUrlsRef.current.add(nextUrl);
         setCurrentImageUrl(nextUrl);
-        // Don't set error yet, we're trying an alternative
+        attemptedUrlsRef.current.add(nextUrl);
         return;
       }
     }
-    
-    // If we've exhausted all alternatives, mark as error
-    console.log(`No more alternative URLs to try for coin ${tokenId.toString()}`);
     setImageError(true);
-  }, [tokenId]);
+  }, []);
 
   return (
-    <Tabs value={tab} onValueChange={(v) => setTab(v as "buy" | "sell")}>
-      <div className="flex items-start gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
-        <div className="flex-shrink-0">
-          <div className="w-16 h-16 relative">
-            {/* Base colored circle (always visible) */}
-            <div className={`w-full h-full flex bg-red-500 text-white justify-center items-center rounded-full`}>
-              {displaySymbol?.slice(0, 3)}
+    <div className="flex flex-col gap-4 w-full">
+      {/* Coin Info Box */}
+      {coinData && (
+        <div className="flex items-start gap-4 p-4 bg-[var(--card-background-light)] dark:bg-[var(--card-background-dark)] border border-[var(--primary-light)] dark:border-[var(--primary-dark)] rounded-[var(--radius-lg)] shadow-lg">
+          <div className="flex-shrink-0">
+            <div className="w-16 h-16 relative">
+              {!imageError && currentImageUrl ? (
+                <img
+                  key={currentImageUrl}
+                  src={currentImageUrl}
+                  alt={`${displaySymbol} logo`}
+                  className={`absolute inset-0 w-full h-full rounded-full object-cover transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  onLoad={() => setImageLoaded(true)}
+                  onError={handleImageError}
+                  loading="lazy"
+                  style={{ zIndex: 1 }}
+                />
+              ) : (
+                 <div className="w-full h-full flex bg-[var(--secondary-light)] text-[var(--secondary-foreground-light)] justify-center items-center rounded-full font-semibold text-xl">
+                  {displaySymbol?.slice(0, 3).toUpperCase() || "N/A"}
+                </div>
+              )}
+               {/* Fallback/Loading state for image */}
+              {(!currentImageUrl || !imageLoaded) && !imageError && (
+                <div className="absolute inset-0 w-full h-full flex bg-[var(--secondary-light)] text-[var(--secondary-foreground-light)] justify-center items-center rounded-full">
+                   {/* Optional: Simple spinner or placeholder */}
+                </div>
+              )}
             </div>
-            
-            {/* Use enhanced image loading with fallbacks */}
-            {!imageError && currentImageUrl && (
-              <img
-                src={currentImageUrl}
-                alt={`${displaySymbol} logo`}
-                className={`absolute inset-0 w-full h-full rounded-full object-cover transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-                style={{ zIndex: 1 }}
-                onLoad={() => setImageLoaded(true)}
-                onError={handleImageError}
-                loading="lazy"
-              />
+          </div>
+          <div className="flex flex-col flex-grow overflow-hidden">
+            <div className="flex items-baseline space-x-2">
+              <h3 className="text-lg font-medium truncate text-[var(--foreground-light)] dark:text-[var(--foreground-dark)]" title={displayName}>
+                {displayName}
+              </h3>
+              <span className="text-sm text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">
+                [{displaySymbol}]
+              </span>
+            </div>
+            {description && (
+              <p className="text-sm text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] mt-1 overflow-y-auto max-h-20 scrollbar-thin scrollbar-thumb-[var(--border-light)] dark:scrollbar-thumb-[var(--border-dark)] scrollbar-track-transparent">
+                {description}
+              </p>
             )}
+            <div className="mt-2 text-xs text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">
+              {marketCapEth !== null && marketCapEth !== undefined && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[var(--foreground-light)] dark:text-[var(--foreground-dark)]">Est. Market Cap:</span>
+                  <span>{formatNumber(Number(marketCapEth))} ETH</span>
+                  {ethPriceData && marketCapEth > 0 && (
+                     <span className="ml-1">
+                      (~
+                      {(() => {
+                        // Assuming ethPriceData[0] is USD price with 8 decimals
+                        const ethPriceUsd = Number(formatUnits(ethPriceData[0], 8));
+                        const marketCapUsdValue = Number(marketCapEth) * ethPriceUsd;
+                        return `$${formatNumber(marketCapUsdValue, 0)}`; // Calculate and return in one line
+                      })()}
+                      )
+                    </span>
+                  )}
+                </div>
+              )}
+              {coinData?.metadata?.tokenURI && (
+                <div className="mt-1">
+                  <a
+                    href={formatImageURL(coinData.metadata.tokenURI)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[var(--primary-light)] hover:text-[oklch(from_var(--primary-light)_l_calc(l+0.1))] dark:text-[var(--primary-dark)] dark:hover:text-[oklch(from_var(--primary-dark)_l_calc(l+0.1))] hover:underline"
+                  >
+                    View Token Metadata
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex flex-col flex-grow overflow-hidden">
-          <div className="flex items-baseline space-x-2">
-            <h3 className="text-lg font-medium truncate">{displayName}</h3>
-            <span className="text-sm text-gray-500">[{displaySymbol}]</span>
-          </div>
-          
-          {/* Description */}
-          <p className="text-sm text-gray-600 mt-1 overflow-y-auto max-h-20">
-            {description || "No description available"}
-          </p>
-          
-          {/* Market Cap Estimation */}
-          <div className="mt-2 text-xs text-gray-500">
-            {marketCapEth !== null && (
-              <div className="flex items-center gap-1">
-                <span className="text-gray-600">Est. Market Cap:</span>
-                <span>{formatNumber(marketCapEth, 2)} ETH</span>
-                {marketCapUsd !== null ? (
-                  <span className="ml-1">(~${formatNumber(marketCapUsd, 0)})</span>
-                ) : ethPriceData ? (
-                  <span className="ml-1 text-yellow-500">(USD price processing...)</span>
-                ) : (
-                  <span className="ml-1 text-yellow-500">(ETH price unavailable)</span>
-                )}
-              </div>
-            )}
-            
-            {/* Token URI link if available */}
-            {coinData?.tokenURI && coinData.tokenURI !== 'N/A' && (
-              <div className="mt-1">
-                <a 
-                  href={coinData.tokenURI.startsWith('ipfs://') 
-                    ? `https://content.wrappr.wtf/ipfs/${coinData.tokenURI.slice(7)}` 
-                    : coinData.tokenURI}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-500 hover:underline"
-                >
-                  View Token Metadata
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      
-      <TabsList>
-        <TabsTrigger value="buy">
-          Buy {displayName} [{displaySymbol}]
-        </TabsTrigger>
-        <TabsTrigger value="sell">
-          Sell {displayName} [{displaySymbol}]
-        </TabsTrigger>
-      </TabsList>
+      )}
 
-      <TabsContent value="buy">
-        <div className="flex flex-col gap-2">
-          <span className="text-sm text-gray-600">Using ETH</span>
-          <Input
-            type="number"
-            placeholder="Amount ETH"
-            value={amount}
-            min="0"
-            step="any"
-            onChange={(e) => setAmount(e.currentTarget.value)}
-          />
-          <span className="text-sm">
-            You will receive ~ {estimated} {displaySymbol}
-          </span>
-          <Button
-            onClick={onBuy}
-            disabled={!isConnected || isPending || !amount}
-            variant="default"
-          >
-            {isPending ? "Buying…" : `Buy ${displaySymbol}`}
-          </Button>
-        </div>
-      </TabsContent>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as "buy" | "sell")} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 bg-[var(--secondary-light)] dark:bg-[var(--secondary-dark)] p-1 rounded-[var(--radius-md)] h-auto">
+          <TabsTrigger value="buy">
+            Buy {displayName} [{displaySymbol}]
+          </TabsTrigger>
+          <TabsTrigger value="sell">
+            Sell {displayName} [{displaySymbol}]
+          </TabsTrigger>
+        </TabsList>
 
-      <TabsContent value="sell">
-        <div className="flex flex-col gap-2">
-          <span className="text-sm text-gray-600">Using {displaySymbol}</span>
-          <div className="relative">
+        <TabsContent value="buy">
+          <div className="flex flex-col gap-2">
+            <span className="text-sm text-gray-600">Using ETH</span>
             <Input
               type="number"
-              placeholder={`Amount ${displaySymbol}`}
+              placeholder="Amount ETH"
               value={amount}
               min="0"
               step="any"
               onChange={(e) => setAmount(e.currentTarget.value)}
             />
+            <span className="text-sm">
+              You will receive ~ {estimated} {displaySymbol}
+            </span>
+            <Button
+              onClick={onBuy}
+              disabled={!isConnected || isPending || !amount}
+              variant="default"
+            >
+              {isPending ? "Buying…" : `Buy ${displaySymbol}`}
+            </Button>
           </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-sm">You will receive ~ {estimated} ETH</span>
-            {balance !== undefined ? (
-              <button
-                className="self-end text-sm text-gray-600"
-                onClick={() => setAmount(formatUnits(balance, 18))}
-              >
-                MAX ({formatUnits(balance, 18)})
-              </button>
-            ) : (
-              <button
-                className="self-end text-sm text-gray-600"
-                disabled={!balance}
-              >
-                MAX
-              </button>
-            )}
-          </div>
-          <Button
-            onClick={onSell}
-            disabled={!isConnected || isPending || !amount}
-            variant="outline"
-          >
-            {isPending ? "Selling…" : `Sell ${displaySymbol}`}
-          </Button>
-        </div>
-      </TabsContent>
+        </TabsContent>
 
-      {errorMessage && <p className="text-destructive text-sm">{errorMessage}</p>}
-      {isSuccess && <p className="text-green-600 text-sm">Tx confirmed!</p>}
-    </Tabs>
+        <TabsContent value="sell">
+          <div className="flex flex-col gap-2">
+            <span className="text-sm text-gray-600">Using {displaySymbol}</span>
+            <div className="relative">
+              <Input
+                type="number"
+                placeholder={`Amount ${displaySymbol}`}
+                value={amount}
+                min="0"
+                step="any"
+                onChange={(e) => setAmount(e.currentTarget.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-sm">You will receive ~ {estimated} ETH</span>
+              {balance !== undefined ? (
+                <button
+                  className="self-end text-sm text-gray-600"
+                  onClick={() => setAmount(formatUnits(balance, 18))}
+                >
+                  MAX ({formatUnits(balance, 18)})
+                </button>
+              ) : (
+                <button
+                  className="self-end text-sm text-gray-600"
+                  disabled={!balance}
+                >
+                  MAX
+                </button>
+              )}
+            </div>
+            <Button
+              onClick={onSell}
+              disabled={!isConnected || isPending || !amount}
+              variant="outline"
+            >
+              {isPending ? "Selling…" : `Sell ${displaySymbol}`}
+            </Button>
+          </div>
+        </TabsContent>
+
+        {errorMessage && <p className="text-destructive text-sm">{errorMessage}</p>}
+        {isSuccess && <p className="text-green-600 text-sm">Tx confirmed!</p>}
+      </Tabs>
+    </div>
   );
 };

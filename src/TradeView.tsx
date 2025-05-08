@@ -116,10 +116,10 @@ export const TradeView = ({
 
 
   return (
-    <div className="w-full max-w-lg mx-auto flex flex-col gap-4 px-2 py-4 sm:p-6">
+    <div className="w-full max-w-lg mx-auto flex flex-col gap-4 px-2 py-4 sm:p-6 bg-[var(--card-background-light)] dark:bg-[var(--card-background-dark)] border border-[var(--card-border-light)] dark:border-[var(--card-border-dark)] rounded-[var(--radius-lg)] shadow-xl">
       <button
         onClick={onBack}
-        className="text-sm self-start underline py-2 px-1 touch-manipulation"
+        className="text-sm self-start py-2 px-1 touch-manipulation text-[var(--primary-light)] hover:text-[oklch(from_var(--primary-light)_l_calc(l+0.1))] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-light)] rounded-[var(--radius-sm)]"
       >
         ⬅︎ Back to Explorer
       </button>

@@ -102,7 +102,8 @@ body {
   min-height: 100vh;
   width: 100vw;
   /* Default to light theme variables (which are now our black/orange theme) */
-  background-color: var(--background-light);
+  background: linear-gradient(135deg, oklch(0.05 0.01 240), oklch(0.12 0.02 30), oklch(0.05 0.01 240)); /* Dark blue/black to orange to dark blue/black */
+  background-attachment: fixed; /* Makes the gradient fixed during scroll */
   color: var(--foreground-light);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -111,7 +112,8 @@ body {
 /* .dark body selector is not strictly needed if :root is already the dark theme */
 /* However, keeping it doesn't hurt if a toggle mechanism adds/removes .dark */
 .dark body {
-  background-color: var(--background-dark); /* Will use the .dark variables */
+  background: linear-gradient(135deg, oklch(0.05 0.01 240), oklch(0.12 0.02 30), oklch(0.05 0.01 240)); /* Ensure dark mode also gets the gradient */
+  background-attachment: fixed;
   color: var(--foreground-dark);
 }
 

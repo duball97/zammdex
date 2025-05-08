@@ -59,7 +59,7 @@ export const Coins = () => {
   // Show the explorer grid
   return (
     <>
-      <div className="text-sm text-gray-500 mb-2">
+      <div className="text-sm text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] text-center mb-3">
         Page {page + 1} of {totalPages} • 
         Showing items {offset + 1}-{Math.min(offset + coins.length, total)} of {total}
       </div>

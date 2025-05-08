@@ -23,9 +23,8 @@ export const Header: React.FC<HeaderProps> = ({ setView, currentView }) => {
     <header className="flex justify-between items-center w-full p-3 bg-[var(--card-background-light)] dark:bg-[var(--card-background-dark)] text-[var(--foreground-light)] dark:text-[var(--foreground-dark)] mb-6 shadow-sm border-b border-[var(--card-border-light)] dark:border-[var(--card-border-dark)] min-w-0">
       {/* Added flex-shrink-0 to prevent title from being squashed. mr-2 for some space. */}
       <div className="flex-shrink-0 mr-3">
-        {/* You could put a logo or app title here if you like */}
-        {/* <img src="/coinchan-logo.png" alt="Coinchan" className="h-8 w-auto" /> */}
-        <span className="text-xl font-semibold text-[var(--foreground-light)] dark:text-[var(--foreground-dark)]">Coinchan</span>
+        {/* Changed website name */}
+        <span className="text-xl font-semibold text-[var(--foreground-light)] dark:text-[var(--foreground-dark)]">Zappr.fun</span>
       </div>
       {/* 
         - Added flex-wrap: allows nav items to wrap to the next line.

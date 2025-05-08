@@ -636,31 +636,31 @@ const TokenSelector = ({
       {/* Selected token display with thumbnail */}
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 cursor-pointer bg-transparent border border-yellow-200 rounded-md px-2 py-1 hover:bg-yellow-50 touch-manipulation"
+        className="flex items-center gap-2 cursor-pointer bg-transparent border border-[var(--border-light)] rounded-[var(--radius-md)] px-2 py-1 hover:bg-[var(--secondary-light)]/50 touch-manipulation"
       >
         <TokenImage token={selectedToken} />
         <div className="flex flex-col">
           <div className="flex items-center gap-1">
-            <span className="font-medium">{selectedToken.symbol}</span>
+            <span className="font-medium text-[var(--foreground-light)]">{selectedToken.symbol}</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="text-xs font-medium text-gray-700 min-w-[50px] h-[14px]">
+            <div className="text-xs font-medium text-[var(--muted-foreground-light)] min-w-[50px] h-[14px]">
               {formatBalance(selectedToken)}
               {selectedToken.id === null && isEthBalanceFetching && 
-                <span className="text-xs text-yellow-500 ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
+                <span className="text-xs text-[var(--primary-light)] ml-1" style={{ animation: 'pulse 1.5s infinite' }}>·</span>}
             </div>
           </div>
         </div>
-        <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+        <svg className="w-4 h-4 ml-1 text-[var(--muted-foreground-light)]" viewBox="0 0 24 24" stroke="currentColor" fill="none">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
         </svg>
       </div>
       
       {/* Dropdown list with thumbnails */}
       {isOpen && (
-        <div className="absolute z-20 mt-1 w-[calc(100vw-40px)] sm:w-64 max-h-[60vh] sm:max-h-96 overflow-y-auto bg-white border border-yellow-200 shadow-lg rounded-md">
+        <div className="absolute z-20 mt-1 w-[calc(100vw-40px)] sm:w-64 max-h-[60vh] sm:max-h-96 overflow-y-auto bg-[var(--popover-background-light)] border border-[var(--border-light)] shadow-lg rounded-[var(--radius-md)]">
           {/* Search input */}
-          <div className="sticky top-0 bg-white p-2 border-b border-yellow-100">
+          <div className="sticky top-0 bg-[var(--popover-background-light)] p-2 border-b border-[var(--border-light)]">
             <div className="relative">
               <input
                 type="text"
@@ -681,10 +681,10 @@ const TokenSelector = ({
                     }
                   });
                 }}
-                className="w-full p-2 pl-8 border border-yellow-200 rounded focus:outline-none focus:ring-2 focus:ring-yellow-300 text-sm"
+                className="w-full p-2 pl-8 border border-[var(--input-border-light)] bg-[var(--input-background-light)] text-[var(--input-foreground-light)] rounded-[var(--radius-sm)] focus:outline-none focus:ring-2 focus:ring-[var(--ring-light)] text-sm placeholder:text-[var(--muted-foreground-light)]"
               />
               <svg 
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" 
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted-foreground-light)]" 
                 fill="none" 
                 stroke="currentColor" 
                 viewBox="0 0 24 24"
@@ -739,21 +739,21 @@ const TokenSelector = ({
                 data-token-symbol={token.symbol}
                 data-token-name={token.name}
                 data-token-id={token.id?.toString() ?? "eth"}
-                className={`flex items-center justify-between p-3 sm:p-2 hover:bg-yellow-50 cursor-pointer touch-manipulation ${
-                  isSelected ? "bg-yellow-100" : ""
+                className={`flex items-center justify-between p-3 sm:p-2 hover:bg-[var(--accent-light)]/10 cursor-pointer touch-manipulation ${
+                  isSelected ? "bg-[var(--accent-light)]/20" : ""
                 }`}
               >
                 <div className="flex items-center gap-2">
                   <TokenImage token={token} />
                   <div className="flex flex-col">
-                    <span className="font-medium">{token.symbol}</span>
+                    <span className="font-medium text-[var(--foreground-light)]">{token.symbol}</span>
                     {reserves && (
-                      <span className="text-xs text-gray-500">{reserves}</span>
+                      <span className="text-xs text-[var(--muted-foreground-light)]">{reserves}</span>
                     )}
                   </div>
                 </div>
                 <div className="text-right min-w-[60px]">
-                  <div className="text-sm font-medium h-[18px]">
+                  <div className="text-sm font-medium h-[18px] text-[var(--foreground-light)]">
                     {balance}
                     {token.id === null && isEthBalanceFetching && 
                       <span className="text-xs text-[var(--primary-light)] ml-1 animate-pulse">•</span>}
@@ -786,6 +786,9 @@ export const SwapTile = () => {
   
   // Single-ETH estimation values
   const [singleETHEstimatedCoin, setSingleETHEstimatedCoin] = useState<string>("");
+  
+  // Derived state for the problematic condition
+  const isSingleEthLiquidityMode = mode === "liquidity" && liquidityMode === "single-eth";
   
   // When switching to single-eth mode, ensure ETH is selected as the sell token 
   // and set a default target token if none is selected
@@ -1929,12 +1932,12 @@ export const SwapTile = () => {
                 {/* Text based on mode */} 
                 {mode === "swap" ? "Sell" : 
                   liquidityMode === "add" ? "Provide" : 
-                  liquidityMode === "remove" ? "You'll Receive (ETH)" :
+                  liquidityMode === "remove" ? "You\'ll Receive (ETH)" :
                   "Provide ETH"}
               </span>
               <>
                 {/* Token Selector styling for single-eth ETH display */} 
-                {mode === "liquidity" && liquidityMode === "single-eth" ? (
+                {isSingleEthLiquidityMode ? (
                   <div className="flex items-center gap-2 bg-[var(--secondary-light)] border border-[var(--border-light)] rounded-[var(--radius-md)] px-2 py-1">
                     <div className="w-6 h-6 overflow-hidden rounded-full"> {/* Smaller icon */}
                       <img src={ETH_TOKEN.tokenUri} alt="ETH" className="w-full h-full object-cover" />
@@ -1954,7 +1957,7 @@ export const SwapTile = () => {
                     onSelect={handleSellTokenSelect}
                     isEthBalanceFetching={isEthBalanceFetching}
                   />
-                ) ?? null} 
+                )}
               </>
             </div>
             <div className="flex justify-between items-center">

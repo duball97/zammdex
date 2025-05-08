@@ -57,7 +57,7 @@ function App() {
     <main className="p-0 sm:p-0 min-h-screen w-screen flex flex-col items-center">
       <Header setView={setView} currentView={view} />
       
-      <div className="w-full max-w-lg px-2 sm:px-0 mt-4 mb-8">
+      <div className={`w-full px-2 sm:px-4 mt-4 mb-8 ${view === 'explorer' ? 'max-w-6xl' : 'max-w-lg'}`}>
         {view !== "menu" && view !== "explorer" && view !== "form" && (
           <img
             src="/coinchan-logo.png"
@@ -76,8 +76,8 @@ function App() {
         {view === "memepaper" && <CoinPaper onCoinClick={handleCoinClick} />}
         {view === "swap" && <SwapTile />}
         {view === "explorer" && (
-          <div className="w-full mt-4">
-            <h2 className="text-2xl font-semibold text-white text-center mb-4">Coin Explorer</h2>
+          <div className="w-full">
+            <h2 className="text-2xl font-semibold text-[var(--foreground-light)] dark:text-[var(--foreground-dark)] text-center mb-4">Coin Explorer</h2>
             <Coins />
           </div>
         )}

@@ -24,19 +24,11 @@ export const CoinCard = ({ coin, onTrade }: CoinCardProps) => {
     attemptedUrlsRef.current = new Set();
   }, [coin.coinId]);
 
-  // Simple function to get a color based on token ID
-  const getColorForId = (id: bigint) => {
-    const colors = [
-      'bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500',
-      'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500'
-    ];
-    const index = Number(id % BigInt(colors.length));
-    return colors[index];
-  };
-
   // Display values with fallbacks
   const displayName = coin.name || `Token ${coin.coinId.toString()}`;
-  const displaySymbol = coin.symbol || "TKN";
+  const displaySymbol = coin.symbol?.slice(0, 4) || "TKN";
+  const shortCoinId = `${coin.coinId.toString().substring(0, 4)}...${coin.coinId.toString().substring(coin.coinId.toString().length - 4)}`;
+
   // FIX: Centralized image URL resolution logic for clarity and maintainability.
   // Consolidates multiple potential sources (coin.imageUrl, metadata.image, etc.) into a single prioritized check.
   // Improves render consistency and simplifies fallback image handling.
@@ -109,38 +101,45 @@ export const CoinCard = ({ coin, onTrade }: CoinCardProps) => {
   }, [coin.coinId]);
 
   return (
-    <Card className="flex border-2 border-red-900 rounded-md bg-yellow-50 w-full flex-col items-right p-1 gap-2 shadow">
-      <CardContent className="flex flex-col items-center justify-center p-2 space-y-2">
-        <h3 className="text-center font-extrabold text-xs sm:text-sm truncate w-full">
-          {displayName} [{displaySymbol}]
-        </h3>
-
-        <div className="w-16 h-16 sm:w-20 sm:h-20 relative">
-          {/* Base colored circle (always visible) */}
-          <div className={`absolute inset-0 flex ${getColorForId(coin.coinId)} text-white justify-center items-center rounded-full`}>
-            {displaySymbol.slice(0, 3)}
+    <Card 
+      className="flex flex-col h-full bg-[var(--card-background-light)] border border-[var(--card-border-light)] rounded-[var(--radius-xl)] shadow-lg hover:shadow-xl transition-all duration-200 overflow-hidden cursor-pointer group" 
+      onClick={() => onTrade(coin.coinId)}
+      title={`Name: ${displayName}\nSymbol: ${displaySymbol}\nID: ${coin.coinId.toString()}`}
+    >
+      <CardContent className="flex flex-col items-center justify-between p-3 sm:p-4 space-y-3 flex-grow">
+        <div className="w-16 h-16 sm:w-20 sm:h-20 relative flex-shrink-0 mb-1">
+          <div className={`absolute inset-0 flex bg-[var(--secondary-light)] text-[var(--secondary-foreground-light)] justify-center items-center rounded-full font-medium text-lg`}>
+            {imageError && displaySymbol.slice(0, 3)}
+            {!currentImageUrl && !imageError && <div className="w-4 h-4 border-2 border-[var(--muted-foreground-light)] border-t-transparent rounded-full animate-spin"></div>}
           </div>
 
-          {/* Image (displayed on top if available and loaded successfully) */}
           {!imageError && currentImageUrl && (
             <img
+              key={currentImageUrl}
               src={currentImageUrl}
               alt={`${displaySymbol} logo`}
-              className={`absolute inset-0 w-full h-full rounded-full object-cover transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-              style={{ zIndex: 1 }}
-              onLoad={() => setImageLoaded(true)}
+              className={`absolute inset-0 w-full h-full rounded-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => { console.log('Loaded:', currentImageUrl); setImageLoaded(true); setImageError(false); }}
               onError={handleImageError}
               loading="lazy"
             />
           )}
         </div>
 
-        <button
-          className="m-0 rounded-full bg-white py-1 px-3 text-red-500 font-extrabold hover:scale-105 hover:underline text-sm touch-manipulation"
-          onClick={() => onTrade(coin.coinId)}
+        <div className="text-center w-full">
+          <h3 className="font-semibold text-sm sm:text-base text-[var(--foreground-light)] dark:text-[var(--foreground-dark)] truncate" title={displayName}>
+            {displayName} 
+          </h3>
+          <p className="text-xs text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)] truncate" title={displaySymbol}>
+            ({displaySymbol}) 
+          </p>
+        </div>
+
+        <div
+          className="mt-auto rounded-[var(--radius-lg)] bg-[var(--primary-light)] py-1 px-5 text-[var(--primary-foreground-light)] font-semibold text-sm shadow-sm group-hover:brightness-110 transition-all"
         >
           Trade
-        </button>
+        </div>
       </CardContent>
     </Card>
   );

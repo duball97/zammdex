@@ -1,5 +1,6 @@
 import { CoinCard } from "./components/CoinCard";
 import { type CoinData } from "./hooks/metadata";
+import { Loader2 } from "lucide-react";
 
 // Default page size
 const PAGE_SIZE = 20;
@@ -54,10 +55,17 @@ export const ExplorerGrid = ({
       });
     }
   }
+
+  // Define button styles using CSS vars
+  const buttonBase = "px-4 py-1.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
+  const activeButtonStyle = `${buttonBase} bg-[var(--secondary-light)] border border-[var(--border-light)] text-[var(--secondary-foreground-light)] hover:bg-[var(--border-light)] hover:text-[var(--foreground-light)] focus-visible:outline-[var(--ring-light)]`;
+  const disabledButtonStyle = `${buttonBase} bg-transparent border border-transparent text-[var(--muted-foreground-light)] opacity-50 cursor-not-allowed`;
+
   return (
-    <div className="w-full px-2 sm:px-4">
+    <div className="w-full">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg sm:text-xl font-semibold text-center sm:text-left">
+        {/* Style title */}
+        <h2 className="text-lg sm:text-xl font-semibold text-[var(--foreground-light)] dark:text-[var(--foreground-dark)]">
           {total === 0
             ? "NO COINS DEPLOYED"
             : total === 1
@@ -65,45 +73,45 @@ export const ExplorerGrid = ({
               : `${total} COINS DEPLOYED`}
         </h2>
         
-        {/* Loading indicator */}
+        {/* Style loading indicator */}
         {isLoading && (
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full border-2 border-red-500 border-t-transparent animate-spin mr-2"></div>
-            <span className="text-sm text-red-500">Loading...</span>
+          <div className="flex items-center text-[var(--primary-light)] dark:text-[var(--primary-dark)]">
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            <span className="text-sm font-medium">Loading...</span>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 min-h-[300px]">
+      {/* Increase grid gap */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6 min-h-[300px]">
         {coins.map((coin) => (
           <div 
             key={coin.coinId.toString()} 
-            className={isLoading ? "opacity-60 pointer-events-none" : ""}
+            className={`transition-opacity duration-300 ${isLoading ? "opacity-50 pointer-events-none" : "opacity-100"}`}
           >
             <CoinCard coin={coin} onTrade={onTrade} />
           </div>
         ))}
         
-        {/* Show skeleton loaders for empty grid during initial load */}
+        {/* Style skeleton loaders */}
         {coins.length === 0 && total > 0 && Array.from({ length: Math.min(total, PAGE_SIZE) }).map((_, index) => (
-          <div key={`skeleton-${index}`} className="flex border-2 border-red-900/30 rounded-md bg-yellow-50/50 w-full flex-col items-right p-1 gap-2 shadow h-32 animate-pulse"></div>
+          <div key={`skeleton-${index}`} className="border border-[var(--card-border-light)] rounded-[var(--radius-lg)] bg-[var(--card-background-light)] w-full h-40 sm:h-48 animate-pulse"></div>
         ))}
       </div>
 
+      {/* Style pagination buttons */}
       <div className="pagination-buttons flex justify-between items-center mt-6 mb-4">
         <button
           onClick={onPrev}
           disabled={!canPrev || isLoading}
-          className={`px-4 py-2 rounded-md border border-red-300 hover:bg-red-50 touch-manipulation ${
-            !canPrev || isLoading ? "text-gray-400 opacity-50" : "text-red-500 font-bold"
-          }`}
+          className={`${!canPrev || isLoading ? disabledButtonStyle : activeButtonStyle}`}
         >
           Previous
         </button>
         
-        {/* Page info from parent */}
+        {/* Style page info text */}
         {total > 0 && (
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-[var(--muted-foreground-light)] dark:text-[var(--muted-foreground-dark)]">
             Page {currentPage} of {totalPages}
           </span>
         )}
@@ -111,9 +119,7 @@ export const ExplorerGrid = ({
         <button
           onClick={onNext}
           disabled={!canNext || isLoading}
-          className={`px-4 py-2 rounded-md border border-red-300 hover:bg-red-50 touch-manipulation ${
-            !canNext || isLoading ? "text-gray-400 opacity-50" : "text-red-500 font-bold"
-          }`}
+          className={`${!canNext || isLoading ? disabledButtonStyle : activeButtonStyle}`}
         >
           Next
         </button>
